@@ -15,6 +15,7 @@ s3_client = boto3.client(
     aws_access_key_id=access_key,
     aws_secret_access_key=secret_key,
     config=Config(signature_version='s3v4'),  # 确保使用正确的签名版本
+    region_name='us-east-1'  # 指定区域
 )
 
 # 执行操作（例如列出桶）
