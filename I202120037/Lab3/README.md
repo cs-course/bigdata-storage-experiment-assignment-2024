@@ -46,7 +46,7 @@ LAB 3 - 观测性能分析
 |工具|数据生成|数据图生成|文件路径|
 |:---|:---|:---|:---|
 |s3bench|[tesh.sh](assets/s3-latency/test.sh)|[myplot.py](assets/s3-latency/myplot.py)|[s3-latency](assets/s3-latency)
-|python-boto3|[latency_test_MinIO.py](assets/py-latency/latency_test_MinIO.py) |[latency-plot.ipynb](assets/py-latency/latency-plot.ipynb)|[py-latency](assets/py-latency)
+|py-boto3|[latency_test_MinIO.py](assets/py-latency/latency_test_MinIO.py) |[latency-plot.ipynb](assets/py-latency/latency-plot.ipynb)|[py-latency](assets/py-latency)
 
 下列所展示的测试结果与分析均为 s3bench 工具下生成的结果并对其进行分析。
 
