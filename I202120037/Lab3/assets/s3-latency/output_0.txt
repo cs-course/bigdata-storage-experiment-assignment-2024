@@ -1,0 +1,261 @@
+Test parameters
+endpoint(s):      [http://127.0.0.1:9000]
+bucket:           loadgen
+objectNamePrefix: loadgen
+objectSize:       1.0000 MB
+numClients:       1
+numSamples:       100
+verbose:       %!d(bool=true)
+tracing:       %!d(bool=false)
+
+
+Generating in-memory sample data... Done (521.4µs)
+
+Running Write test...
+Write operation completed in 0.011s (1/100) - 94.14MB/s
+Write operation completed in 0.010s (2/100) - 97.65MB/s
+Write operation completed in 0.011s (3/100) - 95.98MB/s
+Write operation completed in 0.012s (4/100) - 91.50MB/s
+Write operation completed in 0.009s (5/100) - 94.09MB/s
+Write operation completed in 0.008s (6/100) - 97.47MB/s
+Write operation completed in 0.008s (7/100) - 100.89MB/s
+Write operation completed in 0.008s (8/100) - 103.43MB/s
+Write operation completed in 0.009s (9/100) - 104.70MB/s
+Write operation completed in 0.008s (10/100) - 105.92MB/s
+Write operation completed in 0.009s (11/100) - 106.79MB/s
+Write operation completed in 0.010s (12/100) - 105.99MB/s
+Write operation completed in 0.010s (13/100) - 105.94MB/s
+Write operation completed in 0.008s (14/100) - 107.11MB/s
+Write operation completed in 0.009s (15/100) - 107.18MB/s
+Write operation completed in 0.011s (16/100) - 106.32MB/s
+Write operation completed in 0.008s (17/100) - 107.18MB/s
+Write operation completed in 0.009s (18/100) - 107.32MB/s
+Write operation completed in 0.008s (19/100) - 108.00MB/s
+Write operation completed in 0.008s (20/100) - 108.62MB/s
+Write operation completed in 0.008s (21/100) - 109.05MB/s
+Write operation completed in 0.008s (22/100) - 109.69MB/s
+Write operation completed in 0.009s (23/100) - 109.75MB/s
+Write operation completed in 0.009s (24/100) - 110.04MB/s
+Write operation completed in 0.008s (25/100) - 110.33MB/s
+Write operation completed in 0.008s (26/100) - 110.77MB/s
+Write operation completed in 0.010s (27/100) - 110.46MB/s
+Write operation completed in 0.009s (28/100) - 110.64MB/s
+Write operation completed in 0.009s (29/100) - 110.77MB/s
+Write operation completed in 0.009s (30/100) - 110.77MB/s
+Write operation completed in 0.010s (31/100) - 110.55MB/s
+Write operation completed in 0.009s (32/100) - 110.71MB/s
+Write operation completed in 0.009s (33/100) - 110.57MB/s
+Write operation completed in 0.008s (34/100) - 110.96MB/s
+Write operation completed in 0.009s (35/100) - 111.11MB/s
+Write operation completed in 0.009s (36/100) - 111.03MB/s
+Write operation completed in 0.011s (37/100) - 110.48MB/s
+Write operation completed in 0.010s (38/100) - 110.13MB/s
+Write operation completed in 0.011s (39/100) - 109.42MB/s
+Write operation completed in 0.010s (40/100) - 109.28MB/s
+Write operation completed in 0.011s (41/100) - 108.67MB/s
+Write operation completed in 0.011s (42/100) - 108.21MB/s
+Write operation completed in 0.011s (43/100) - 107.70MB/s
+Write operation completed in 0.010s (44/100) - 107.45MB/s
+Write operation completed in 0.011s (45/100) - 107.06MB/s
+Write operation completed in 0.009s (46/100) - 107.13MB/s
+Write operation completed in 0.012s (47/100) - 106.54MB/s
+Write operation completed in 0.011s (48/100) - 106.20MB/s
+Write operation completed in 0.014s (49/100) - 105.17MB/s
+Write operation completed in 0.014s (50/100) - 104.17MB/s
+Write operation completed in 0.013s (51/100) - 103.37MB/s
+Write operation completed in 0.015s (52/100) - 102.38MB/s
+Write operation completed in 0.016s (53/100) - 101.08MB/s
+Write operation completed in 0.018s (54/100) - 99.61MB/s
+Write operation completed in 0.015s (55/100) - 98.69MB/s
+Write operation completed in 0.016s (56/100) - 97.67MB/s
+Write operation completed in 0.010s (57/100) - 97.79MB/s
+Write operation completed in 0.011s (58/100) - 97.64MB/s
+Write operation completed in 0.011s (59/100) - 97.46MB/s
+Write operation completed in 0.011s (60/100) - 97.40MB/s
+Write operation completed in 0.012s (61/100) - 97.08MB/s
+Write operation completed in 0.011s (62/100) - 97.01MB/s
+Write operation completed in 0.009s (63/100) - 97.20MB/s
+Write operation completed in 0.009s (64/100) - 97.32MB/s
+Write operation completed in 0.010s (65/100) - 97.33MB/s
+Write operation completed in 0.009s (66/100) - 97.53MB/s
+Write operation completed in 0.008s (67/100) - 97.78MB/s
+Write operation completed in 0.010s (68/100) - 97.80MB/s
+Write operation completed in 0.009s (69/100) - 97.91MB/s
+Write operation completed in 0.008s (70/100) - 98.23MB/s
+Write operation completed in 0.008s (71/100) - 98.52MB/s
+Write operation completed in 0.009s (72/100) - 98.68MB/s
+Write operation completed in 0.009s (73/100) - 98.84MB/s
+Write operation completed in 0.008s (74/100) - 99.15MB/s
+Write operation completed in 0.009s (75/100) - 99.29MB/s
+Write operation completed in 0.010s (76/100) - 99.31MB/s
+Write operation completed in 0.010s (77/100) - 99.37MB/s
+Write operation completed in 0.009s (78/100) - 99.50MB/s
+Write operation completed in 0.008s (79/100) - 99.72MB/s
+Write operation completed in 0.009s (80/100) - 99.86MB/s
+Write operation completed in 0.008s (81/100) - 100.06MB/s
+Write operation completed in 0.009s (82/100) - 100.15MB/s
+Write operation completed in 0.008s (83/100) - 100.34MB/s
+Write operation completed in 0.008s (84/100) - 100.59MB/s
+Write operation completed in 0.008s (85/100) - 100.82MB/s
+Write operation completed in 0.009s (86/100) - 100.98MB/s
+Write operation completed in 0.010s (87/100) - 100.96MB/s
+Write operation completed in 0.009s (88/100) - 101.08MB/s
+Write operation completed in 0.009s (89/100) - 101.16MB/s
+Write operation completed in 0.009s (90/100) - 101.27MB/s
+Write operation completed in 0.009s (91/100) - 101.37MB/s
+Write operation completed in 0.009s (92/100) - 101.51MB/s
+Write operation completed in 0.008s (93/100) - 101.73MB/s
+Write operation completed in 0.008s (94/100) - 101.93MB/s
+Write operation completed in 0.008s (95/100) - 102.09MB/s
+Write operation completed in 0.010s (96/100) - 102.06MB/s
+Write operation completed in 0.008s (97/100) - 102.20MB/s
+Write operation completed in 0.016s (98/100) - 101.50MB/s
+Write operation completed in 0.016s (99/100) - 100.81MB/s
+Write operation completed in 0.015s (100/100) - 100.27MB/s
+
+Running Read test...
+Read operation completed in 0.007s (1/100) - 133.77MB/s
+Read operation completed in 0.005s (2/100) - 155.42MB/s
+Read operation completed in 0.005s (3/100) - 163.98MB/s
+Read operation completed in 0.004s (4/100) - 177.03MB/s
+Read operation completed in 0.005s (5/100) - 182.29MB/s
+Read operation completed in 0.005s (6/100) - 183.46MB/s
+Read operation completed in 0.004s (7/100) - 188.59MB/s
+Read operation completed in 0.004s (8/100) - 195.93MB/s
+Read operation completed in 0.006s (9/100) - 192.35MB/s
+Read operation completed in 0.004s (10/100) - 197.88MB/s
+Read operation completed in 0.005s (11/100) - 196.76MB/s
+Read operation completed in 0.006s (12/100) - 192.85MB/s
+Read operation completed in 0.005s (13/100) - 193.71MB/s
+Read operation completed in 0.004s (14/100) - 197.64MB/s
+Read operation completed in 0.005s (15/100) - 196.74MB/s
+Read operation completed in 0.005s (16/100) - 197.39MB/s
+Read operation completed in 0.005s (17/100) - 196.56MB/s
+Read operation completed in 0.005s (18/100) - 196.41MB/s
+Read operation completed in 0.006s (19/100) - 194.83MB/s
+Read operation completed in 0.005s (20/100) - 194.77MB/s
+Read operation completed in 0.005s (21/100) - 194.49MB/s
+Read operation completed in 0.005s (22/100) - 194.18MB/s
+Read operation completed in 0.005s (23/100) - 193.83MB/s
+Read operation completed in 0.006s (24/100) - 194.02MB/s
+Read operation completed in 0.004s (25/100) - 195.61MB/s
+Read operation completed in 0.004s (26/100) - 197.19MB/s
+Read operation completed in 0.005s (27/100) - 197.28MB/s
+Read operation completed in 0.005s (28/100) - 197.96MB/s
+Read operation completed in 0.005s (29/100) - 198.19MB/s
+Read operation completed in 0.005s (30/100) - 198.50MB/s
+Read operation completed in 0.004s (31/100) - 199.71MB/s
+Read operation completed in 0.005s (32/100) - 199.83MB/s
+Read operation completed in 0.005s (33/100) - 199.53MB/s
+Read operation completed in 0.005s (34/100) - 199.69MB/s
+Read operation completed in 0.005s (35/100) - 200.23MB/s
+Read operation completed in 0.005s (36/100) - 200.23MB/s
+Read operation completed in 0.005s (37/100) - 200.22MB/s
+Read operation completed in 0.004s (38/100) - 201.28MB/s
+Read operation completed in 0.006s (39/100) - 200.20MB/s
+Read operation completed in 0.004s (40/100) - 201.21MB/s
+Read operation completed in 0.005s (41/100) - 200.99MB/s
+Read operation completed in 0.005s (42/100) - 201.21MB/s
+Read operation completed in 0.006s (43/100) - 200.63MB/s
+Read operation completed in 0.005s (44/100) - 200.39MB/s
+Read operation completed in 0.005s (45/100) - 200.69MB/s
+Read operation completed in 0.005s (46/100) - 200.50MB/s
+Read operation completed in 0.005s (47/100) - 200.14MB/s
+Read operation completed in 0.006s (48/100) - 199.46MB/s
+Read operation completed in 0.005s (49/100) - 198.89MB/s
+Read operation completed in 0.005s (50/100) - 199.61MB/s
+Read operation completed in 0.005s (51/100) - 199.50MB/s
+Read operation completed in 0.004s (52/100) - 200.09MB/s
+Read operation completed in 0.005s (53/100) - 200.23MB/s
+Read operation completed in 0.005s (54/100) - 200.42MB/s
+Read operation completed in 0.005s (55/100) - 200.34MB/s
+Read operation completed in 0.004s (56/100) - 201.18MB/s
+Read operation completed in 0.005s (57/100) - 201.46MB/s
+Read operation completed in 0.006s (58/100) - 200.80MB/s
+Read operation completed in 0.005s (59/100) - 200.63MB/s
+Read operation completed in 0.006s (60/100) - 200.20MB/s
+Read operation completed in 0.006s (61/100) - 199.60MB/s
+Read operation completed in 0.005s (62/100) - 199.76MB/s
+Read operation completed in 0.005s (63/100) - 199.86MB/s
+Read operation completed in 0.005s (64/100) - 199.75MB/s
+Read operation completed in 0.005s (65/100) - 199.58MB/s
+Read operation completed in 0.006s (66/100) - 199.11MB/s
+Read operation completed in 0.007s (67/100) - 197.98MB/s
+Read operation completed in 0.005s (68/100) - 198.10MB/s
+Read operation completed in 0.006s (69/100) - 197.78MB/s
+Read operation completed in 0.008s (70/100) - 196.29MB/s
+Read operation completed in 0.006s (71/100) - 195.96MB/s
+Read operation completed in 0.007s (72/100) - 194.73MB/s
+Read operation completed in 0.006s (73/100) - 194.33MB/s
+Read operation completed in 0.007s (74/100) - 193.15MB/s
+Read operation completed in 0.006s (75/100) - 192.74MB/s
+Read operation completed in 0.005s (76/100) - 192.62MB/s
+Read operation completed in 0.005s (77/100) - 192.78MB/s
+Read operation completed in 0.005s (78/100) - 193.09MB/s
+Read operation completed in 0.004s (79/100) - 193.66MB/s
+Read operation completed in 0.005s (80/100) - 193.56MB/s
+Read operation completed in 0.005s (81/100) - 193.65MB/s
+Read operation completed in 0.005s (82/100) - 193.91MB/s
+Read operation completed in 0.005s (83/100) - 194.19MB/s
+Read operation completed in 0.005s (84/100) - 194.34MB/s
+Read operation completed in 0.004s (85/100) - 194.82MB/s
+Read operation completed in 0.004s (86/100) - 195.24MB/s
+Read operation completed in 0.005s (87/100) - 195.08MB/s
+Read operation completed in 0.005s (88/100) - 195.23MB/s
+Read operation completed in 0.006s (89/100) - 194.98MB/s
+Read operation completed in 0.005s (90/100) - 194.88MB/s
+Read operation completed in 0.003s (91/100) - 195.57MB/s
+Read operation completed in 0.005s (92/100) - 195.70MB/s
+Read operation completed in 0.004s (93/100) - 196.15MB/s
+Read operation completed in 0.004s (94/100) - 196.51MB/s
+Read operation completed in 0.004s (95/100) - 196.87MB/s
+Read operation completed in 0.003s (96/100) - 197.62MB/s
+Read operation completed in 0.006s (97/100) - 197.41MB/s
+Read operation completed in 0.005s (98/100) - 197.54MB/s
+Read operation completed in 0.004s (99/100) - 197.87MB/s
+Read operation completed in 0.005s (100/100) - 197.96MB/s
+
+Test parameters
+endpoint(s):      [http://127.0.0.1:9000]
+bucket:           loadgen
+objectNamePrefix: loadgen
+objectSize:       1.0000 MB
+numClients:       1
+numSamples:       100
+verbose:       %!d(bool=true)
+tracing:       %!d(bool=false)
+
+
+Results Summary for Write Operation(s)
+Total Transferred: 100.000 MB
+Total Throughput:  86.25 MB/s
+Total Duration:    0.998 s
+Number of Errors:  0
+------------------------------------
+Write times Max:       0.018 s
+Write times 99th %ile: 0.018 s
+Write times 90th %ile: 0.014 s
+Write times 75th %ile: 0.011 s
+Write times 50th %ile: 0.009 s
+Write times 25th %ile: 0.008 s
+Write times Min:       0.008 s
+
+
+Results Summary for Read Operation(s)
+Total Transferred: 100.000 MB
+Total Throughput:  446.07 MB/s
+Total Duration:    0.505 s
+Number of Errors:  0
+------------------------------------
+Read times Max:       0.008 s
+Read times 99th %ile: 0.008 s
+Read times 90th %ile: 0.006 s
+Read times 75th %ile: 0.005 s
+Read times 50th %ile: 0.005 s
+Read times 25th %ile: 0.005 s
+Read times Min:       0.003 s
+
+
+Cleaning up 100 objects...
+Deleting a batch of 100 objects in range {0, 99}... Succeeded
+Successfully deleted 100/100 objects in 315.1688ms
