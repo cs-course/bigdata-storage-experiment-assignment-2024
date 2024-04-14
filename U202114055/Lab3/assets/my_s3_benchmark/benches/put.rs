@@ -23,11 +23,24 @@ async fn put(client:&Client) -> Result<PutObjectOutput, SdkError<PutObjectError>
 
 fn criterion_benchmark(c: &mut Criterion) {
     let rt = Runtime::new().unwrap();
+    // let client:Client = rt.block_on(create_s3_client(false));
+    // c.bench_function("Async PutObject", move |b| {
+    //     let cli = client.clone();
+    //     b.to_async(FuturesExecutor).iter(|| async {
+    //         let _ret = put(black_box(&cli));
+    //     })
+    // });
+
     let client:Client = rt.block_on(create_s3_client(false));
-    c.bench_function("Async PutObject", move |b| {
-        let cli = client.clone();
+    c.bench_function("Async PutObject Parallel", move |b| {
+        
         b.to_async(FuturesExecutor).iter(|| async {
-            let _ret = put(black_box(&cli));
+            let futures = (0..6).map(|_| 
+                async {
+                    let _ret = put(&client);
+                }
+            );
+            let _results: Vec<_> = futures_util::future::join_all(futures).await;
         })
     });
 }

@@ -34,19 +34,19 @@ async fn get(client:&Client) -> Result<usize, Box<dyn Error>> {
 
 fn criterion_benchmark(c: &mut Criterion) {
     let rt = Runtime::new().unwrap();
-    let client:Client = rt.block_on(create_s3_client(false));
-    c.bench_function("Async GetObject", move |b| {
-        let cli = client.clone();
-        b.to_async(FuturesExecutor).iter(|| async {
-            let _ret = get(&cli);
-        })
-    });
+    // let client:Client = rt.block_on(create_s3_client(false));
+    // c.bench_function("Async GetObject", move |b| {
+    //     let cli = client.clone();
+    //     b.to_async(FuturesExecutor).iter(|| async {
+    //         let _ret = get(&cli);
+    //     })
+    // });
 
     let client:Client = rt.block_on(create_s3_client(false));
     c.bench_function("Async GetObject Parallel", move |b| {
         
         b.to_async(FuturesExecutor).iter(|| async {
-            let futures = (0..10).map(|_| 
+            let futures = (0..6).map(|_| 
                 async {
                     let _ret = get(&client);
                 }
