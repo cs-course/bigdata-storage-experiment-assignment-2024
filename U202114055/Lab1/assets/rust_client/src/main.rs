@@ -167,10 +167,10 @@ async fn main() -> Result<(), Error> {
             "help" => {
                 println!("Please read the loop part in the main.rs.");
                 println!("create : create bucket [bucket_name] \n// create a bucket named [bucket_name].");
-                println!("         create object [bucket_name] [local_object_path] [object_key] \n// create an object in [bucket_name] named [object_key] from [local_object_path].");
+                println!("create : create object [bucket_name] [local_object_path] [object_key] \n // create or update an object in [bucket_name] named [object_key] from [local_object_path].");
                 println!("read   : read [bucket_name] [object_key] [output_file_path] \n// read the [object_key] in [bucket_name] to the local [output_file_path].");
                 println!("delete : delete bucket [bucket_name] \n// delete the bucket named [bucket_name].");
-                println!("       : delete object [bucket_name] [object_key] \n// delete the [object_key] in the [bucket_name].");
+                println!("delete : delete object [bucket_name] [object_key] \n// delete the [object_key] in the [bucket_name].");
                 println!("ls     : ls \n// list all the buckets.");
                 println!("lso    : lso [bucket_name] \n// list all the objects(max 50) in the [bucket_name].");
             }
