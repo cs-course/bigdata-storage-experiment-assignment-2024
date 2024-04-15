@@ -4,7 +4,7 @@
 
 # 实验环境
 
-Windows 11 下 VirtualBox 运行 Ubuntu 22.04 LTS，运行s3proxy作为对象存储系统，使用 boto3 访问 s3proxy。
+Windows 11 下 VirtualBox 运行 Ubuntu 22.04 LTS，运行s3proxy作为对象存储系统。
 
 s3proxy 使用 filesystem 作为 backend 来存取数据。
 
