@@ -1,0 +1,25 @@
+[package]
+name = "my_s3_benchmark"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+tokio = {version = "1", features=["full"]}
+aws-config = { version = "1", features = ["behavior-version-latest"] }
+aws-sdk-s3 = { version = "1", features = ["behavior-version-latest"] }
+rusoto_core = "0.48.0"
+rusoto_credential = "0.48.0"
+criterion = {version = "0.3", features = ["async_futures"]}
+futures = "0.3"
+futures-util = "0.3"
+aws-credential-types = { version = "=1.1.5", features = ["hardcoded-credentials"] }
+
+[[bench]]
+name = "get"
+harness = false
+
+[[bench]]
+name = "put"
+harness = false
