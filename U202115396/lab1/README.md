@@ -16,6 +16,8 @@
 
 ## 实验lab1
 
+### Minio Server服务端的搭建
+
 1. 直接在Minio官网下载Minio Server的windows版本
 
    ![1710894014706.png](./figure/1710894014706.png)
@@ -26,5 +28,14 @@
 4. 界面如下：（Minio Server会把与minio.exe同目录下的文件夹初始化为空桶）
 
    ![1710894390081.png](./figure/1710894390081.png)
+
+### mock-s3服务端的搭建
+
+1. 首先将用Python重写fake-s3模仿Amazon S3的mock-s3的仓库克隆到本地
+   `git clone https://github.com/ShiZhan/mock-s3`
+2. 然后就可以根据文档介绍，直接进入mock_s3目录，在`9000`端口启动服务端
+   `python main.py --hostname 0.0.0.0 --port 9000 --root ./root`，运行截图如下：
+
+![1713363879806.png](./figure/1713363879806.png)
 
 # 实验小结
