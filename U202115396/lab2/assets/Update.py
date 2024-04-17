@@ -16,7 +16,10 @@ s3_client = boto3.client(
 
 # 替换存储桶中的对象
 bucket_name = 'my-new-bucket'
-object_key = '《深空彼岸》.txt'
-new_file_path = "E:\\下载\\《深空彼岸》.txt"
-s3_client.upload_file(new_file_path, bucket_name, object_key)
+object_key = 'huoying.jpg'
+new_file_path = "E:\\VScode\\huoying.jpg"
+
+import urllib.parse
+object_key_encoded = urllib.parse.quote(object_key)
+s3_client.upload_file(new_file_path, bucket_name, object_key_encoded)
 print(f'Object {object_key} in {bucket_name} updated.')
