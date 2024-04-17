@@ -4,3 +4,8 @@
 # 课程报告简介
 
 # 实验内容简介
+minio server
+
+minio client
+
+s3-bench-rs范例
