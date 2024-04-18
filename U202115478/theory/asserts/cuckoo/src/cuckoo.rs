@@ -5,6 +5,7 @@ use std::{
     collections::hash_map::DefaultHasher,
     hash::{Hash, Hasher},
     mem::swap,
+    ops::Index,
 };
 type HashImplOne = DefaultHasher;
 type HashImplTwo = FnvHasher;
@@ -17,7 +18,11 @@ pub struct Cuckoo<K, V> {
     bucket_one: Vec<Vec<Option<(K, V)>>>,
     bucket_two: Vec<Vec<Option<(K, V)>>>,
 }
-
+/// 默认初始化
+/// bucket_size:16
+/// slot_size:4
+/// max_loop_times:4
+/// factor:4
 impl<K, V> Default for Cuckoo<K, V>
 where
     K: Clone,
@@ -37,13 +42,26 @@ where
         }
     }
 }
+/// 重载运算符[],不存在对应的key就Panic
+impl<K, V, Q> Index<&Q> for Cuckoo<K, V>
+where
+    K: Eq + Hash + Borrow<Q>,
+    Q: Eq + Hash + ?Sized,
+{
+    type Output = V;
+    fn index(&self, k: &Q) -> &Self::Output {
+        self.get(k).unwrap()
+    }
+}
 
 impl<K, V> Cuckoo<K, V> {
     const BUCKET_SIZE: usize = 16;
     const MAX_LOOP_TIMES: usize = 4;
     const SLOT_SIZE: usize = 4;
     const FACTOR: usize = 4;
-    ///
+    /// bucket_size: 桶的大小
+    /// slot_size: 桶每个槽的槽位
+    /// factor: 扩容因子, new_cap = old_cap * factor
     pub fn new(bucket_size: usize, slot_size: usize, factor: usize) -> Self
     where
         K: Clone,
@@ -58,14 +76,24 @@ impl<K, V> Cuckoo<K, V> {
             bucket_two: vec![vec![None; slot_size]; bucket_size],
         }
     }
-    ///
+    /// 如果k存在,使用新v覆盖旧v
+    /// 如果不存在,插入，
+    /// Kick 超过最大循环次数就扩容
     pub fn insert(&mut self, k: K, v: V) -> bool
     where
         K: Eq + Hash + Clone,
         V: Clone,
     {
-        if self.contains_key(&k) {
-            return true;
+        match self.__index_of_key(&k) {
+            (0, p, idx) => {
+                self.bucket_one[p][idx] = Some((k, v));
+                return true;
+            }
+            (1, p, idx) => {
+                self.bucket_two[p][idx] = Some((k, v));
+                return true;
+            }
+            _ => {}
         }
         self.used += 1;
         if let Some(pair) = self.__insert(k, v) {
@@ -89,7 +117,7 @@ impl<K, V> Cuckoo<K, V> {
         }
         true
     }
-    ///
+    /// 单次插入,成功返回None，否则返回需要插入的(k,v)
     fn __insert(&mut self, k: K, v: V) -> Option<(K, V)>
     where
         K: Eq + Hash,
@@ -130,77 +158,120 @@ impl<K, V> Cuckoo<K, V> {
         }
         Some(pair)
     }
-    ///
+    // 查找指定key对应的 桶索引和槽索引
+    fn __index_of_key<Q>(&self, k: &Q) -> (isize, usize, usize)
+    where
+        K: Borrow<Q> + Eq,
+        Q: Hash + Eq + ?Sized,
+    {
+        let p1 = self.h1(k);
+
+        if let Some(idx) = self.bucket_one[p1].iter().position(|op| match op {
+            Some((ref key, _)) => key.borrow() == k,
+            _ => false,
+        }) {
+            return (0, p1, idx);
+        }
+
+        let p2 = self.h2(k);
+        if let Some(idx) = self.bucket_two[p2].iter().position(|op| match op {
+            Some((ref key, _)) => key.borrow() == k,
+            _ => false,
+        }) {
+            return (1, p2, idx);
+        }
+
+        (-1, 0, 0)
+    }
+    /// 是否包含指定key
     pub fn contains_key<Q>(&self, k: &Q) -> bool
     where
         K: Borrow<Q> + Eq,
         Q: Hash + Eq + ?Sized,
     {
-        let p1 = self.h1(k);
-        let p2 = self.h2(k);
-        self.bucket_one[p1]
-            .iter()
-            .zip(self.bucket_two[p2].iter())
-            .any(|(o1, o2)| {
-                (match o1 {
-                    Some((ref key, _)) => key.borrow() == k,
-                    _ => false,
-                }) || (match o2 {
-                    Some((ref key, _)) => key.borrow() == k,
-                    _ => false,
-                })
-            })
+        match self.__index_of_key(k) {
+            (0 | 1, _, _) => true,
+            _ => false,
+        }
     }
-    ///
-    pub fn remove<Q>(&mut self, key: &Q) -> bool
+    /// 移除指定key,key存在返回true,否则返回false
+    pub fn remove<Q>(&mut self, k: &Q) -> bool
     where
         K: Borrow<Q> + Eq,
         Q: Hash + Eq + ?Sized,
     {
-        let p1 = self.h1(key);
-        let p2 = self.h2(key);
-
-        if let Some(idx) = self.bucket_one[p1]
-            .iter()
-            .position(|op| op.is_some() && op.as_ref().unwrap().0.borrow() == key)
-        {
-            self.bucket_one[p1][idx].take();
-            self.used -= 1;
-            return true;
+        match self.__index_of_key(k) {
+            (0, p, idx) => {
+                self.used -= 1;
+                self.bucket_one[p][idx].take();
+                true
+            }
+            (1, p, idx) => {
+                self.used -= 1;
+                self.bucket_two[p][idx].take();
+                true
+            }
+            _ => false,
         }
-        if let Some(idx) = self.bucket_one[p2]
-            .iter()
-            .position(|op| op.is_some() && op.as_ref().unwrap().0.borrow() == key)
-        {
-            self.bucket_one[p2][idx].take();
-            self.used -= 1;
-            return true;
-        }
-        false
     }
+    /// 获取key对应的value
     pub fn get<Q>(&self, k: &Q) -> Option<&V>
     where
-        K: Borrow<Q>,
+        K: Borrow<Q> + Eq,
         Q: Hash + Eq + ?Sized,
     {
-        let p1 = self.h1(k);
-        let p2 = self.h2(k);
-        if let Some(idx) = self.bucket_one[p1]
-            .iter()
-            .position(|op| op.is_some() && op.as_ref().unwrap().0.borrow() == k)
-        {
-            return Some(&self.bucket_one[p1][idx].as_ref().unwrap().1);
+        match self.__index_of_key(k) {
+            (0, p, idx) => Some(&self.bucket_one[p][idx].as_ref().unwrap().1),
+            (1, p, idx) => Some(&self.bucket_two[p][idx].as_ref().unwrap().1),
+            _ => None,
         }
-        if let Some(idx) = self.bucket_two[p2]
-            .iter()
-            .position(|op| op.is_some() && op.as_ref().unwrap().0.borrow() == k)
-        {
-            return Some(&self.bucket_two[p2][idx].as_ref().unwrap().1);
-        }
-        None
     }
+    /// 获取空间利用率
     pub fn utilization_rate(&self) -> f64 {
         self.used as f64 / (self.bucket_size * self.slot_size) as f64
+    }
+    /// Hash表存储的元素数量
+    pub fn size(&self) -> usize {
+        self.used
+    }
+    /// 清空
+    pub fn clear(&mut self) {
+        self.used = 0;
+        self.bucket_one
+            .iter_mut()
+            .chain(self.bucket_two.iter_mut())
+            .flatten()
+            .for_each(|op| {
+                op.take();
+            });
+    }
+    /// 设置扩容因子,new_capacity = old_capacity * factor
+    pub fn set_factor(&mut self, factor: usize) {
+        self.factor = factor;
+    }
+    /// 将内部结构自带的迭代器串联并展开作为Cuckoo的迭代器
+    pub fn iter(&self) -> impl Iterator<Item = (&K, &V)> {
+        self.bucket_one
+            .iter()
+            .chain(self.bucket_two.iter())
+            .flatten()
+            .filter(|op| op.is_some())
+            .map(|op| {
+                let (k, v) = op.as_ref().unwrap();
+                (k, v)
+            })
+    }
+    #[allow(unused)]
+    pub fn iter_mut(&mut self) -> impl Iterator<Item = (&mut K, &mut V)> {
+        self.bucket_one
+            .iter_mut()
+            .chain(self.bucket_two.iter_mut())
+            .flatten()
+            .filter(|op| op.is_some())
+            .map(|op| {
+                let (k, v) = op.as_mut().unwrap();
+                (k, v)
+            })
     }
     /// 默认使用std::DefaultHasher
     fn h1<Q>(&self, k: &Q) -> usize

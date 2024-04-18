@@ -1,5 +1,5 @@
-#![feature(test)]
-extern crate test;
+// #![feature(test)]
+// extern crate test;
 
 use criterion::{criterion_group, criterion_main, Criterion};
 use cuckoo::Cuckoo;

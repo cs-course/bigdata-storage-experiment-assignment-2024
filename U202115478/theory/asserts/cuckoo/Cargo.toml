@@ -16,3 +16,9 @@ criterion = { version = "0.3.0", features = ["html_reports"] }
 [[bench]]
 name = "insert_bench"
 harness = false
+
+[profile.test]
+# 设置测试时使用 release 模式
+opt-level = 3
+# 禁用调试信息
+debug = false
