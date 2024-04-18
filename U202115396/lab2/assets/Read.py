@@ -2,7 +2,7 @@
 # 读取对象
 """
 import boto3
-# 指定 Minio Server 的access_key和secret_key
+# 指定 mock_s3 Server 的access_key和secret_key
 access_key = 'zrEx1EHiSHgMpvauncEf'
 secret_key = 'uju0b7EZXgAlTVIG9Hgw6a0i0MqR8DUlWeAkp1yI'
 # 初始化客户端
