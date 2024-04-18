@@ -50,7 +50,8 @@
 初始代码先迭代h1随后迭代h2<br>
 ![con1](./figure/con1.png)
 
-同时迭代h1和h2
+
+同时迭代h1和h2<br>
 ![con2](./figure/con2.png)
 
 测试发现查询性能无明显差异(rust release模式优化效率高)
