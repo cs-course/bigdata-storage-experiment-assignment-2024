@@ -261,7 +261,7 @@ public:
             //弹出元素是从桶头弹，因此选中的不是同一个元素，与另选一个桶没有区别。
             num--;
             conflicts++;
-            if (time(0) % 2) {
+            if (rand() % 2) {
                 auto temp = a[posa].front();
                 a[posa].pop_front();
                 a[posa].emplace_back(key, value);
@@ -382,8 +382,8 @@ public:
         }
         rehashs++;
         //容量已经是最大，再考虑重新哈希
-        maska = std::hash<int>()(time(0));
-        maskb = std::hash<int>()(time(0));
+        maska = std::hash<int>()(rand());
+        maskb = std::hash<int>()(rand());
         //重新哈希的操作其实跟扩容一样，只是不需要扩容，因此代码可以复用
         size_pos--;
         enlarge();
