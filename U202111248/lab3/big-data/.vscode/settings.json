@@ -1,0 +1,8 @@
+{
+    "cSpell.words": [
+        "rusoto"
+    ],
+    "rust-analyzer.linkedProjects": [
+        "./Cargo.toml"
+    ]
+}
