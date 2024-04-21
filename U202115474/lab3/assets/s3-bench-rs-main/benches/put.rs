@@ -3,43 +3,50 @@
 use criterion::async_executor::FuturesExecutor;
 use criterion::{criterion_group, criterion_main, Criterion};
 use reqwest::Url;
-use s3_bench_rs::{PutTaskBuilder, StdError, Task, TaskBuiler};
+use s3_bench_rs::{PutTaskBuilder, Task, TaskBuiler};
 
-// const ENDPOINT: &str = "http://127.0.0.1:12345/auth/v1.0";
-// const KEY: &str = "chris:chris1234";
-// const SECRET: &str = "testing";
-// const BUCKET: &str = "my-container";
-// const OBJECT: &str = "test.txt";
-const ENDPOINT: &str = "http://127.0.0.1:9000";
-const KEY: &str = "admin";
-const SECRET: &str = "password";
-const BUCKET: &str = "my-container";
+const ENDPOINT: &str = "http://127.0.0.1:12345/auth/v1.0";
+const KEY: &str = "chris:chris1234";
+const SECRET: &str = "testing";
+const BUCKET: &str = "user_uploads";
 const OBJECT: &str = "test.txt";
 
-#[tokio::main]
-async fn put() -> Result<String, Box<StdError>> {
-    let tasks: [(String, String); 2] = [
-        ("bucket1".into(), "test0.txt".into()),
-        ("bucket1".into(), "test1.txt".into()),
-    ];
-    let put_task_builder = PutTaskBuilder::new(
-        ENDPOINT.parse::<Url>().unwrap(),
-        KEY,
-        SECRET,
-        "minio",
-        tasks,
-    );
+async fn put() {
+    let put_task_builder =
+        PutTaskBuilder::new(ENDPOINT.parse::<Url>().unwrap(), KEY, SECRET, "minio");
     let task = put_task_builder.spawn(BUCKET, OBJECT);
-    let resp = task.run().await?;
-    Ok(resp)
+    let _ = task.run().await;
 }
 
+use std::thread;
+use tokio::task;
+#[tokio::main]
+async fn putn(n: usize) {
+    let mut handles = vec![];
+    for _ in 0..n {
+        let handle = thread::spawn(move || async {
+            let task = task::spawn(put());
+            task
+        });
+        handles.push(handle);
+    }
+
+    // 等待所有线程完成
+    for handle in handles {
+        let _ = handle.join().unwrap().await;
+    }
+}
 fn criterion_benchmark(c: &mut Criterion) {
-    c.bench_function("Async PutObject", move |b| {
-        b.to_async(FuturesExecutor).iter(|| async {
-            let _ret = put();
-        })
-    });
+    let mut c = c.benchmark_group("Async GetObject");
+    c.measurement_time(std::time::Duration::new(10, 0));
+    c.sample_size(10);
+    for i in 1..=10 {
+        c.bench_function(format!("Async PutObject withConcurrency:{}", i), move |b| {
+            b.to_async(FuturesExecutor).iter(|| async {
+                putn(i);
+            })
+        });
+    }
 }
 
 criterion_group!(benches, criterion_benchmark);
