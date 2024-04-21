@@ -1,0 +1,60 @@
+==== Test write concurrency count: 5 =====
+total write object size 4096 KB
+write object size 64 KB
+total write duration 15.881512042 s
+total write throughput 257.909951468587 KB/s
+write avg latency 0.181119515 s
+==== Test write concurrency count: 10 =====
+total write object size 4096 KB
+write object size 64 KB
+total write duration 23.906133417 s
+total write throughput 171.33678326614185 KB/s
+write avg latency 0.16326484 s
+==== Test write concurrency count: 15 =====
+total write object size 4096 KB
+write object size 64 KB
+total write duration 29.675467584 s
+total write throughput 138.02646877949866 KB/s
+write avg latency 0.184594029 s
+==== Test write concurrency count: 20 =====
+total write object size 4096 KB
+write object size 64 KB
+total write duration 34.48015025 s
+total write throughput 118.79298582812875 KB/s
+write avg latency 0.208822084 s
+==== Test write concurrency count: 25 =====
+total write object size 4096 KB
+write object size 64 KB
+total write duration 38.344611 s
+total write throughput 106.82074724920277 KB/s
+write avg latency 0.223600372 s
+==== Test write concurrency count: 30 =====
+total write object size 4096 KB
+write object size 64 KB
+total write duration 42.1256255 s
+total write throughput 97.23297758510435 KB/s
+write avg latency 0.290824064 s
+==== Test write concurrency count: 35 =====
+total write object size 4096 KB
+write object size 64 KB
+total write duration 45.50706325 s
+total write throughput 90.00800551549544 KB/s
+write avg latency 0.307840032 s
+==== Test write concurrency count: 40 =====
+total write object size 4096 KB
+write object size 64 KB
+total write duration 48.468571042 s
+total write throughput 84.50837134130998 KB/s
+write avg latency 0.299388056 s
+==== Test write concurrency count: 45 =====
+total write object size 4096 KB
+write object size 64 KB
+total write duration 51.205249417 s
+total write throughput 79.99179862680523 KB/s
+write avg latency 0.334397011 s
+==== Test write concurrency count: 50 =====
+total write object size 4096 KB
+write object size 64 KB
+total write duration 53.982366125 s
+total write throughput 75.87662961114786 KB/s
+write avg latency 0.405012386 s
