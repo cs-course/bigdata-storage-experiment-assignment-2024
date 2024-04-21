@@ -17,11 +17,17 @@ enum TestType {
     GetObject,
 }
 async fn put_single_object(
+    file_number: u32,
     object_size: u32,
 ) -> Result<time::Duration, Box<dyn Error + Send + Sync>> {
     let s3_client = client::S3Client::new().await;
     let bucket = "wwb";
-    let object = String::from("test-object-size") + "-" + &object_size.to_string();
+    let object = String::from("test-object-size")
+        + "-"
+        + &object_size.to_string()
+        + "-"
+        + &file_number.to_string();
+
     let source =
         PathBuf::from(String::from("./files/test-object-size") + "-" + &object_size.to_string());
 
@@ -30,13 +36,24 @@ async fn put_single_object(
 }
 
 async fn get_single_object(
+    file_number: u32,
     object_size: u32,
 ) -> Result<time::Duration, Box<dyn Error + Send + Sync>> {
     let s3_client = client::S3Client::new().await;
     let bucket = "wwb";
-    let object = String::from("test-object-size") + "-" + &object_size.to_string();
-    let destination =
-        PathBuf::from(String::from("./files/test-object-size") + "-" + &object_size.to_string());
+    let object = String::from("test-object-size")
+        + "-"
+        + &object_size.to_string()
+        + "-"
+        + &file_number.to_string();
+
+    let destination = PathBuf::from(
+        String::from("./files/test-object-size")
+            + "-"
+            + &object_size.to_string()
+            + "-"
+            + &file_number.to_string(),
+    );
 
     let latency = s3_client.get_object(bucket, &object, &destination).await?;
     Ok(latency)
@@ -56,7 +73,7 @@ async fn run_test(
 
     let sem = Arc::new(tokio::sync::Semaphore::new(concurrency_count as usize));
 
-    for _i in 0..task_count {
+    for i in 0..task_count {
         // avoid moving test_type into the closure
         let test_type_clone = test_type.clone();
         let sem_clone = Arc::clone(&sem);
@@ -67,8 +84,8 @@ async fn run_test(
                 let premit = sem_clone.acquire().await.unwrap();
 
                 match test_type_clone {
-                    TestType::GetObject => get_single_object(object_size).await,
-                    TestType::PutObject => put_single_object(object_size).await,
+                    TestType::GetObject => get_single_object(i, object_size).await,
+                    TestType::PutObject => put_single_object(i, object_size).await,
                 }
             });
         tasks.push(task);

@@ -71,7 +71,7 @@ PutObject测试流程：
 
 总体测试方法与观察对象尺寸对性能的影响类似，在本次实验中限制传输的数据总量 total_size 为 4MB，每次传输的对象尺寸object_size 为 64KB，并发度分别为5, 10, 15, 20, 25, 30, 35, 40, 45, 50。由于rust async 无法直接限制并发数量，因此我使用rust中的Semaphore对并发运行的任务数量进行限制。
 
-详情可见 [bench-concurrency.rs](./asserts/s3-bench/src/bench-concurrency.rs)，设置信号量初始值为concurrency_count, 在运行任务前进行P操作，由于rust所有权机制，当离开作用域后会自动进行v操作。
+详情可见 [bench-concurrency.rs](./asserts/s3-bench/src/bench-concurrency.rs)，设置信号量初始值为concurrency_count, 在运行任务前进行P操作，由于rust所有权机制，当离开作用域后会自动进行V操作。
 
 ![bin](./figures/code.png)
 
@@ -91,20 +91,8 @@ PutObject测试流程：
 
 ​	可以观察到随着并发数量的增加，平均延迟总体呈上升趋势，推测原因与写操作类似，同时由于服务端的 upload 带宽小于 download 带宽，读操作延迟更大。
 
-3. 写操作并发度与吞吐量的关系
-
-![bin](./asserts/s3-bench/results/concurrency-throught-PutObject.png)
-
-​	可以观察到随着并发数量的增加，写吞吐量逐渐下降。
-
-4. 读操作并发度与吞吐量的关系
-
-   ![bin](./asserts/s3-bench/results/concurrency-throught-GetObject.png)
-
-​	可以观察到随着并发数量的增加，读吞吐量逐渐下降。与写操作类似。
-
 
 
 # 实验小结
 
-编制实验分析并了解对象尺寸与并发度对性能的影响。
+在本次实验中，我编制实验程序分析并了解对象尺寸与并发度对对象存储性能的影响，这告诉我在设计存储系统时，需要根据I/O带宽等诸多因素，来具体决定适合的对象尺寸和并发度。这两个变量对系统的影响是相互交织的，调整的结果也呈现非线性变化，例如并发度的提升可以提供更高的吞吐量，但也会带来更大的尾延迟。同时尾延迟在存储系统中可能会严重影响性能，尤其是在高负载情况下，可以尝试采用对冲延迟策略进行一定程度的优化，我计划进行更深入的研究，以大数据和机器学习手段预测和管理尾延迟。我相信通过不断的研究和实验，我们可以更好地理解和优化存储系统，为未来的技术发展做出贡献。
