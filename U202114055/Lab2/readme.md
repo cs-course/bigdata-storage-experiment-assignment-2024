@@ -1,92 +1,116 @@
-# 实验名称
+# 实验名称 
+***Lab 2 实践基本功能***
 
 # 实验环境
-
+- rust 版本：rustc 1.77.0 
+- rust 依赖：
+```
+anyhow = { version = "1" }
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+aws-config = { version = "1", features = ["behavior-version-latest"] }
+aws-sdk-s3 = { version = "1", features = ["behavior-version-latest"] }
+rusoto_core = "0.48.0"
+rusoto_credential = "0.48.0"
+aws-credential-types = { version = "=1.1.5", features = ["hardcoded-credentials"] }
+```
 # 实验记录
 
-## openstack-swift服务端配置
-为了使用swift进行S3 benchmark测试，我们需要对swift进行一定的配置。
-`docker exec -it swift-onlyone bash` 进入docker命令行
-`find -name "proxy-server.conf"`
+## 参考资料
+[aws sdk s3官方示例](https://docs.aws.amazon.com/zh_tw/sdk-for-rust/latest/dg/rust_s3_code_examples.html)
 
-首先`apt install swift-plugin-s3`
+[aws-sdk-rust-examples](https://developer.qiniu.com/kodo/12572/aws-sdk-rust-examples)
 
-在配置文件中找到 pipeline = 部分。
+[aws sdk s3文档](https://docs.rs/aws-sdk-s3/latest/aws_sdk_s3/)
 
-[s3api middleware](https://docs.openstack.org/swift/latest/middleware.html#module-swift.common.middleware.s3api.s3api)
-将 s3api 中间件添加到 pipeline 中，并确保添加在身份验证中间件之前。
-例如这里我们需要将其放到 tempauth的前面。(同时还要确保有bulk和slo，这里我们都默认有)
+[aws-sdk-s3详细api网址](https://docs.rs/aws-sdk-s3/latest/aws_sdk_s3/struct.Client.html#method.put_object)
 
-添加到 pipeline 之后再再后面添加
-```conf
-[filter:s3api]
-use = egg:swift#s3api
-s3_acl = yes
-check_bucket_owner = yes
-cors_preflight_allow_origin = *
-s3_endpoint = http://localhost:12346
-```
-
-![如图所示](./figure/middlewareConf.png)
-
-进行完上述配置之后我们重启docker容器，然后在客户端`pip install awscli`安装。
-使用指令`aws --endpoint-url=http://127.0.0.1:12345 SWIFT_USERNAME=swift123:swift123 SWIFT_KEY=swift123 s3 ls`
-
-由于我们并不需要连接到aws服务器的服务，所以Key什么的不重要。aws configure之后我这里都设置为“placeholder”（官方文档原话：You must provide an AWS Region and credentials, but they don't have to be valid.）
-![alt text](./figure/aws_configure.png)
-
-因为一开始少加了一个端口映射，所以只能先 `docker commit swift-onlyone swift-onlyone-image`保存下来之前的更改
-然后再
-
-`docker run -d --name swift-onlyone2 -p 12346:12346 -p 12345:8080 -e SWIFT_USERNAME=swift123:swift123 -e SWIFT_KEY=swift_key -v swift_storage:/srv -t swift-onlyone-image `
-
-最后我们发现还是无法运行，这是使用`find -name "middleware"`查找到swift中间件的位置，在宿主机下载[s3api文件夹](https://github.com/openstack/swift/tree/master/swift/common/middleware)，使用`docker cp localfile containerName:containerPath`复制到docker，然后再移动到swift中间件的路径。
-根据[官方添加中间件文档](https://docs.openstack.org/swift/latest/development_middleware.html),发现依然不起作用。
-
-发现我们docker安装的swift版本为2.17，而最新版已经到了2.33.0,其中2.29.0以上才出现s3api（因为官方文档说swift3已经过时被启用，所以我们这里选择使用中间件s3api），所以我们`pip install swift --upgrade`，但是报错，gcc编译失败，`apt install liberasurecode-dev`，依旧报错，使用pip3，最终安装成功。
-
-`swift-init restart all`重新启动swift服务这次成功使用s3api中间件没有报错，之后再次在宿主机上`aws s3 ls --endpoint-url http://127.0.0.1:12345`测试，这次连接成功只是这次报错说我们的`aws configure`的时候不能将region设置为placeholder于是更改为us-east-1。
-之后还是报错，我们发现其实并不能随意设置aws configure中的内容，[s3api middleware官网原话](https://docs.openstack.org/swift/latest/middleware.html):make sure you have setting the tempauth middleware configuration in proxy-server.conf, and the access key will be the concatenation of the account and user strings that should look like test:tester, and the secret access key is the account password. The host should also point to the swift storage hostname.
-
-所以我们的access-key是`swift123:swift123`,secret-key是`swift_key`.
-最后使用`aws s3 ls --endpoint-url http://127.0.0.1:12345`，没有报错并且成功结束，说明连接并且验证成功。
-
-[aws s3 api](https://docs.aws.amazon.com/zh_cn/cli/latest/userguide/cli-services-s3-commands.html)
-
-设置endpoint_url全局变量[教程文档](https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-endpoints.html)
-
-<!-- 
-```conf
-[filter:tempauth]
-tempurl_key = swift123 // added line
-``` -->
-<!-- check_bucket_owner = no
-cors_preflight_allow_origin = *
-s3_endpoint = http://localhost:12346 -->
-
-## rust 客户端配置
-
-[参考文档](https://developer.qiniu.com/kodo/12572/aws-sdk-rust-examples)
-使用上述连接中的方式成功使用 aws sdk for rust连接服务端
-```
-    let access_key_id = "swift123:swift123";
-    let secret_access_key = "swift_key";
+## rust 客户端的实现
+在查阅了上述的资料之后，我使用了aws sdk for rust来编写客户端应用程序。
+如下所示的函数，创建并返回了一个连接到openstack-swift且支持aws s3接口的客户端。参考我们之前`Lab1`中查阅到的s3api官网的原话（make sure you have setting the tempauth middleware configuration in proxy-server.conf, and the access key will be the concatenation of the account and user strings that should look like test:tester, and the secret access key is the account password. The host should also point to the swift storage hostname.），我们应该将ACCESS_KEY_ID设置为"swift123:swift123"，并且将SECRET_ACCESS_KEY设置为"swift_key".
+```rust
+const ACCESS_KEY_ID: &str = "swift123:swift123";
+const SECRET_ACCESS_KEY: &str = "swift_key";
+async fn create_s3_client(show_config:bool) -> Client {
     
     let config = aws_config::from_env()
         .endpoint_url("http://127.0.0.1:12345".to_string())
         .credentials_provider(SharedCredentialsProvider::new(Credentials::from_keys(
-            access_key_id.to_string(),
-            secret_access_key.to_string(),
+            ACCESS_KEY_ID.to_string(),
+            SECRET_ACCESS_KEY.to_string(),
             None,
         )))
         .load()
         .await;
     let s3_local_config = aws_sdk_s3::config::Builder::from(&config).build();
-    println!("{:#?}", s3_local_config);
-   // println!("{:#?}",config);
+    if show_config {
+        println!("{:#?}", s3_local_config);
+    }
     let client = Client::from_conf(s3_local_config);
+    return client;
+}
 ```
-[aws sdk s3文档](https://docs.rs/aws-sdk-s3/latest/aws_sdk_s3/)
-[详细api网址](https://docs.rs/aws-sdk-s3/latest/aws_sdk_s3/struct.Client.html#method.put_object)
+
+然后在main函数调用`create_s3_client`函数建立一个连接之后，就可以在main函数的loop里面读取用户输入的命令，然后对输入的命令进行字符串解析，就可以分别在对应匹配的情况下实现`CRUD`(Create，Read，Update，Delete)命令的实现（具体所有函数的实现见代码）
+
+```rust
+ loop {
+        let mut input = String::new();
+        io::stdin().read_line(&mut input).expect("Failed to read the input!");
+        // 去掉两端空格
+        let input = input.trim();
+        let args: Vec<&str> = input.split_whitespace().collect();
+        let command = match args.get(0) {
+            Some(cmd) => *cmd,
+            None => {
+                println!("No command read.");
+                continue;
+            }
+        };
+        match command {
+            "quit" => {
+            }
+            "help" => {
+            }
+            "create" => {
+            }
+            "read" => { 
+            }
+            "delete" => {
+            }
+            "ls" => { // list all buckets
+            }
+            "lso" => { // list objects
+            }
+            _ => {
+            }
+        }
+    }
+```
+
+在完成客户端代码的编写之后，进入到/assets/rust_client文件夹中运行cargo run，具体的输入`help`可以在终端中查看所有支持的命令，输入`create bucket`并且在之后跟上自定义的桶的名字可以创建一个存储桶。输入`create object`再加上存储桶的名字，读入文件的本地路径以及创建的对象的key就可以在指定的桶中创建一个对象（同理该命令也可以用来更新对象）。`read`命令跟上存储桶的名字和对象的键值以及输出的地址就可以读取服务器中存储对象的内容并且保存到本地指定的地址当中去。`delete bucket`跟上存储桶的名字可以删除指定空的存储桶，而`delete object`再加上存储桶的名字和对象的键值可以直接删除一个对象。最后`ls`命令可以查看服务器中所有的存储桶列表，`lso`再加上存储桶的名字就可以查看指定存储桶中所有对象的名字。
+并且在终端中输入help可以查看如下所示的所有支持的命令。
+```
+help
+Please read the loop part in the main.rs.
+create : create bucket [bucket_name] 
+// create a bucket named [bucket_name].
+create : create object [bucket_name] [local_object_path] [object_key] 
+ // create or update an object in [bucket_name] named [object_key] from [local_object_path].
+read   : read [bucket_name] [object_key] [output_file_path] 
+// read the [object_key] in [bucket_name] to the local [output_file_path].
+delete : delete bucket [bucket_name] 
+// delete the bucket named [bucket_name].
+delete : delete object [bucket_name] [object_key] 
+// delete the [object_key] in the [bucket_name].
+ls     : ls 
+// list all the buckets.
+lso    : lso [bucket_name] 
+// list all the objects(max 50) in the [bucket_name].
+```
+
+如下图所示，我们可以按照help中的提示执行如下的命令，对客户端和服务端支持的功能进行测试：
+![](./figure/rust-client-test.png)
 
 # 实验小结
+在本节实验当中，我使用了rust 以及 aws sdk for rust 变成实现了一个客户端，并且成功连接上了在`Lab1`中实现的服务端，最后编程实现了访问持久存储的4项基本操作（CRUD），并通过运行客户端对所有操作进行了验证。
+此外本节实验也有效的锻炼到了我在面对陌生的api时，查阅官方文档和相关资料的信息检索能力和自学能力。

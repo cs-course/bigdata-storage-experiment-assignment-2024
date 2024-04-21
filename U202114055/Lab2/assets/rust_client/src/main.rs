@@ -146,6 +146,8 @@ async fn main() -> Result<(), Error> {
     let _region: &str = "us-east-1";
     println!("Input help for help!");
     loop {
+        print!(">>> ");
+        let _ = io::stdout().flush();
         let mut input = String::new();
         io::stdin().read_line(&mut input).expect("Failed to read the input!");
         // 去掉两端空格

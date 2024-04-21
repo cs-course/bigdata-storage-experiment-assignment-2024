@@ -1,13 +1,13 @@
-use std::{fs::File, io::{self, Write}, error::Error};
+use std::{fs::File, io::Write, error::Error};
 
 use aws_sdk_s3::{Client};
 use my_s3_benchmark::create_s3_client;
 use criterion::async_executor::FuturesExecutor;
-use criterion::{criterion_group, criterion_main, Criterion, black_box};
+use criterion::{criterion_group, criterion_main, Criterion};
 use tokio::runtime::Runtime;
 
-const BUCKET_NAME: &str = "testbucket";
-const OBJECT_NAME: &str = "testfile";
+const BUCKET_NAME: &str = "testbucket";//"wwb";//
+const OBJECT_NAME: &str = "testfile";//"put_testfile0";//
 const DEST_PATH: &str = "../get_output_file.txt";
 
 #[tokio::main]
@@ -28,8 +28,8 @@ async fn get(client:&Client) -> Result<usize, Box<dyn Error>> {
         // trace!("Intermediate write of {bytes_len}");
         byte_count += bytes_len;
     }
-
-    Ok(byte_count)
+    Ok(0)
+    //Ok(byte_count)
 }
 
 fn criterion_benchmark(c: &mut Criterion) {
@@ -46,7 +46,7 @@ fn criterion_benchmark(c: &mut Criterion) {
     c.bench_function("Async GetObject Parallel", move |b| {
         
         b.to_async(FuturesExecutor).iter(|| async {
-            let futures = (0..6).map(|_| 
+            let futures = (0..16).map(|_| 
                 async {
                     let _ret = get(&client);
                 }
