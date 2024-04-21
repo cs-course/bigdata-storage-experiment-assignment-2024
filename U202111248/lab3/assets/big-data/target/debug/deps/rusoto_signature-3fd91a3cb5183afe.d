@@ -1,0 +1,10 @@
+/Users/kk/Documents/big-data-storage/bigdata-storage-experiment-assignment-2024/U202111248/lab3/big-data/target/debug/deps/librusoto_signature-3fd91a3cb5183afe.rmeta: /Users/kk/.cargo/registry/src/index.crates.io-6f17d22bba15001f/rusoto_signature-0.48.0/src/lib.rs /Users/kk/.cargo/registry/src/index.crates.io-6f17d22bba15001f/rusoto_signature-0.48.0/src/region.rs /Users/kk/.cargo/registry/src/index.crates.io-6f17d22bba15001f/rusoto_signature-0.48.0/src/signature.rs /Users/kk/.cargo/registry/src/index.crates.io-6f17d22bba15001f/rusoto_signature-0.48.0/src/stream.rs
+
+/Users/kk/Documents/big-data-storage/bigdata-storage-experiment-assignment-2024/U202111248/lab3/big-data/target/debug/deps/librusoto_signature-3fd91a3cb5183afe.rlib: /Users/kk/.cargo/registry/src/index.crates.io-6f17d22bba15001f/rusoto_signature-0.48.0/src/lib.rs /Users/kk/.cargo/registry/src/index.crates.io-6f17d22bba15001f/rusoto_signature-0.48.0/src/region.rs /Users/kk/.cargo/registry/src/index.crates.io-6f17d22bba15001f/rusoto_signature-0.48.0/src/signature.rs /Users/kk/.cargo/registry/src/index.crates.io-6f17d22bba15001f/rusoto_signature-0.48.0/src/stream.rs
+
+/Users/kk/Documents/big-data-storage/bigdata-storage-experiment-assignment-2024/U202111248/lab3/big-data/target/debug/deps/rusoto_signature-3fd91a3cb5183afe.d: /Users/kk/.cargo/registry/src/index.crates.io-6f17d22bba15001f/rusoto_signature-0.48.0/src/lib.rs /Users/kk/.cargo/registry/src/index.crates.io-6f17d22bba15001f/rusoto_signature-0.48.0/src/region.rs /Users/kk/.cargo/registry/src/index.crates.io-6f17d22bba15001f/rusoto_signature-0.48.0/src/signature.rs /Users/kk/.cargo/registry/src/index.crates.io-6f17d22bba15001f/rusoto_signature-0.48.0/src/stream.rs
+
+/Users/kk/.cargo/registry/src/index.crates.io-6f17d22bba15001f/rusoto_signature-0.48.0/src/lib.rs:
+/Users/kk/.cargo/registry/src/index.crates.io-6f17d22bba15001f/rusoto_signature-0.48.0/src/region.rs:
+/Users/kk/.cargo/registry/src/index.crates.io-6f17d22bba15001f/rusoto_signature-0.48.0/src/signature.rs:
+/Users/kk/.cargo/registry/src/index.crates.io-6f17d22bba15001f/rusoto_signature-0.48.0/src/stream.rs:

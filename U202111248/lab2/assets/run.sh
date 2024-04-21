@@ -1,5 +1,5 @@
 #!/bin/bash
-cd ../big-data
+cd ./big-data
 
 cargo test --package big-data --test basic_operations -- basic_operations_for_str --exact --nocapture
 
