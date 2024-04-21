@@ -1,0 +1,760 @@
+.TH GETPUT 1 "May 2014" LOCAL "getput" -*- nroff -*-
+.SH NAME
+getput - swift benchmarking load generation tool
+
+.SH SYNOPSIS
+
+getput -c cont -o obj -s size -t tests { -n num | -runtime secs } [options...]
+
+.SH DESCRIPTION
+
+Getput will PUT, GET and DELETE a number of objects to/from a specified container
+and report the resultant MB/ and Operations/sec along with several other stats.
+Tests may be grouped into sets and run successively.  One can also supply a set of
+sizes and the tests will be rerun, using a different size for each set.  There are
+far too many combinations to describe them all so you'll have to read about them
+and try various combinations, observing the effect on the testing and output.
+
+Important enough that I don't want to lose this!  It was discovered during testing
+that if one has http_proxy defined in their environment, connections will hang unless
+the env variable no_proxy is also defined to explicitly exclude any addresses the
+client is trying to connect to include any specified with --proxies.  For that
+reason, getput will export its own version of no_proxy for the current execution.
+It is now known if this will have adverse effects in other environments in the future
+but if you experience weird connection behavior this could be a good place to look
+and possibly try commenting out the the line: os.environ['no_proxy'] = no_proxy
+
+. SH API INTERFACES
+
+When getput was first developed, it interfaced only to swift and used the swift client
+API. Since those days, other object stores such as CEPH also support the Swift Client
+API and the same time Swift has added other API interfaces it supports, such as Amazon
+Cloud's Simply Storage Service also known as S3. To use the S3 API you must first
+install the python boto package which is the common way most applications interface
+to S3 in python.
+
+By Default, getput uses the Swift Client API but when the --s3 switch is included,
+getput uses the Amazon S3 API, which it does via boto.
+
+Throughout the remainder of this manpage
+there are a number of mentions of getput talking to swift and rather than go
+through a major cleanup, suffice it to say when it says this it really means it
+speaks the swift client API. It should also be understood that this interface
+has been tested on both Swift and CEPH and the S3 interface has only been
+tested on CEPH.
+
+.SH AUTHENTICATION
+
+You must have valid credentials to access the Swift or s3 APIs and for the
+swift interface these credentials may be specified in environment variables
+the same way one would specify them for using the swift client utility OR
+simply create a file that can be sourced.  Define them as lines consisting of:
+
+export OS_AUTH_URL=authentication end point
+.br
+export OS_USERNAME=username
+.br
+export OS_PASSWORD=password
+.br
+export OS_TENANT_ID=tenantID
+.br
+export OS_TENANT_NAME=tenantname
+.br
+
+and pass the name of that file to getput using --creds filename.
+One specifies the credentials in a similar way for S3 only in this case
+use the following variable names:
+
+export RGW_ACCESS_ID=access id
+.br
+export RGW_SECRET_KEY=secret key
+.br
+export RGW_HOST=address of RGW host
+.br
+export RGW_PORT=RGW host port
+.br
+
+This file can also be sourced or passed to getput using --creds. Unfortunately there
+is no easy way to test these with boto. Rather one can just try using them and hope
+for the best OR install s3cmd and and configure it to use these credentials, the last
+step of configuration being to test that they work. Once you get them working, you can
+then set them up as described above.
+
+.SH CONTAINER NAME FORMATS
+
+By default, the format of a container is hierarchical, and by that is  meant:
+
+name[-utc]-rank-process
+
+The name is that supplied to getput with the -c or --cname switch.
+
+If the --utc switch is included with a PUT operation, the current utc time is 
+appended to the name of the container, insuring a new and therefore empty
+container will be created.  That container will be used for any subsequent 
+operations, even is they are PUTs as well, thereby allowing you to measure
+rewrite operations.
+
+The rank, which by default is zero is typically set by gpsuite when running
+on multiple nodes.  The process is the process number and also starts at zero.
+
+.SH CONTAINER TYPES
+
+When one uses the default container type, which is 'shared', neither the rank
+nor the process numbers are included and so the resultant container is shared by
+all.  Similarly, the 'bynode' type inludes the rank but not process and so all
+processes on the same node share the container.  And finally, the 'byproc' type
+includes the process number as well and so results in unique containers for each
+individual process.
+
+Since most of the time people are interested in seeing the system working the
+hardest, shared containers are almost exclusively used, at least by me.
+
+.SH OBJECT NAME FORMAT
+
+The object name is also hierachical, based on the -o or --oname switch and 
+looks like this:
+
+name-rank-process-count
+
+the definitions for rank and process are the same as for container names and
+always included regardless of the container type.
+
+The count starts at 1 and increments for each object written for that
+process.
+
+Although rarely needed, sometimes someone might wish to write new objects to
+an existing container and it's not easy to determine what the count of the last
+object written was so that the count could be extended from where it left off.
+This is especially true when using --runtime with a multiple processes and all
+processes are writen at different rates and so can end in different counts.
+
+Therefore, the --objopt u switch is available and when specified, the utc time
+will be appened to the base of object name in the same way --utc causes it to be
+appended to the base container name.  The result is object names will be
+guaranteed to be new and they will be added to the containter and not overwrite
+any existing objects.  Subsequent GET and DEL operations will be smart enough to
+know their names and read them back correctly but subsequent runs will not,
+unless the names with the include times are used for the object name such as
+-oname foo-1382526473 and NOT including --objopt u.
+
+.SH SEQUENTIAL OPERATIONS
+
+The most common operations are performance sequentially, that is one specifies 
+the type of an operation to perform and a number of operations to a timeframe
+for which to run.  The object name used for each test is simply formed by
+appending a monotonically increasing number starting at 1 to the container name.
+
+To get a better sense of how this works, try writing a few objects using
+combinations if --procs and --rank to see the effect.
+
+The only trick, and you really don't even need to know it unless you want to do
+something special, is that if a test completes before all specified objects are
+written because it hit the --runtime, not all objects will have been written out.
+This means if you then try to read back the same number of objects you're get 404
+or 'object not found' errors.  However, if you run the tests as part of the same
+test set, such as doing --tests p,g,d, getput will remember how many objects the
+put test wrote and only use that number for the get and delete tests.
+Furthermore, if the test were written using --procs, it will remember the number
+of objects written by each process and use those values accordingly.
+
+.SH RANDOM OPERATIONS
+
+From a swift perspective, all object operation themselves are essentially random
+since each object is a file which itself resides on one or more systems.  The
+truly random aspects are really involved in accessing the container database
+during a replicated PUT.  The easiest way to make those operations randon is by
+using random object names.
+
+Object Naming
+
+This mechanism has actually changed with verion 0.2.2 and its addition of
+the 'r' value for --objopts.  This tells getput to continue to generate object
+names the way it always has BUT now to pass them through the sha512 python function,
+essentially mapping them into a 128 byte random string!  This means when you now
+do get operations, one is essenatially reading names in random order!  It is
+also possible to reduce the name size if you want to keep them smaller, but keep
+in mind since that results in simply using part of the hash string you could get
+duplicates and never know it so don't make them too small.
+
+It may also be desirable to append to a container already containing a number of
+randomly names objects and that too is no problem, with the addition of the 2nd
+new switch --objseed.  Just like seeds are used with random number generators to
+change the algoritm between runs, this is similar in the sense that the seed
+is appended to the object name before converting it to a sha512 string.  This
+means if you change the seed between runs, you'll essentially generate new
+object names.  Further you can still access any set of random objects from 
+previous runs by just using the same seed they were created with.
+
+However there is a new problem this introduces and that is if you want to access
+old object using random names, especially with multiple --procs, you never know
+how many were actually created for each proc and can't list them to see their
+original names. The solution is a 3rd new switch which also works on non-random
+object names as well and that is --quiton404, which tell getput to read based on
+-n and -r but if you try to read too deeply and hit a 404, simply quit instead
+of throwing an error.
+
+One final thing to keep in mind is that if you want to create a lot of objects
+in the same container using multiple processes, be sure to specify --ctype shared or
+else you'll end up with one container per process.  It you want to append to
+an existing container, also remember to NOT use the --utc switch because that
+would cause a new container name to be generated each time getput is run.
+
+.SH GET BY RANGE
+
+This feature has been added as of V0.2.3 and only applies to GET operations.
+Specifically it allows one to specify ranges of bytes to get from an existing
+object using --range and specifying the starting/ending byte offsets from the
+start of the object as comma separated pairs, noting the first byte is byte 0.
+
+When there are multiple puts/gets, the same get-by-range will apply to each object.
+
+There is an interesting behavior with ranged GETs and that is when benchmarking
+using many processes with which you wish to push swift to its max. IYou can 
+easily find yourself in a situation where you can run many more processes for
+GETs than PUTs since the object being retrieved may be much smaller and therefore
+able to sustain higher levels of parallelism. Say you created a bunch of 100MB
+objects using 16 processes because of bandwidth limitations but want to read them
+back as 1KB chunks using --range and 100 processes. Since the process number is
+actually part of the object name (and even used when creating a random name),
+doing a GET for process 17 will fail with a 404!  Specifying --objopts m16 will
+remap process 17, 33, etc all to process 1.
+
+One other thing to keep in mind is when you look at the object size return by a
+GET, it report the actual number of bytes retrieved. If you use a single range
+of 64K on a 1M object, you see see a size of 64K. BUT since multiple ranged
+GETs actually including formatting to separate the pieces returned you will get
+more than 128K returned and it is this number that is reported.
+
+.SH MIXED TESTS
+
+As of Version 0.3, getput now supports mixed workload testing. Currently when
+you request a PUT or GET test and a number of procs, each process runs one test
+or the other. Now you can specify a mixed workload by selecting a test such as
+p3g2 and as a result, for every 3 threads running PUT tests, 2 will run GET
+tests resulting in a 60%:40% mix. You can specify any values for the PUTs and
+the GETs as long at the number(s) specified by --procs are an even multiple of
+their combined total.
+
+There is one other restriction and that is since the PUTs and GETs run at
+different rates, it's impossible to do GETs on objects that may not yet exist.
+To assure the tests all run at full speed it is therefore required to prepopulate
+the container with objects before runnning the mixed workload, like this: -tp,p3g2.
+Even though the first PUT will generate a full set of objects that may not all be
+read by the g3, that's ok. One thing to keep in mind is in the case of a timed
+test, the number of PUTs are based on the time duration of the test and the
+number of GETs are based on those created by the initial PUT test.
+
+As with non-mixed workloads, you can specify as many tests as you want separated
+by commas, the only restriction is you must have a single p test preceding any
+mixed tests. Alternatively, and primarily as a testing mechanism, you can run a
+standard PUT test, report the number of PUTs/process via --puts_per_proc and then
+run a mixed test omitting the leading PUT test but incuding the object-to-process
+mapping via -n so the mixed tests can find all the pre-existing objects.
+
+The results of mixed tests will use the name of the test specified as the test
+name in the output to make it easy to differentiate from other tests and the
+numbers will be the combination of the results of the PUTs and GETs. If you also
+include --mixopts m, the output will be preceded with 2 lines, one for the PUT
+tests and one for the GETs, named in the form of pX and gY. Though really intended
+more for debugging, if you specify --psum, you'll see an output line for every
+thread in addition to the totals, which may provide further insight into how
+the totals are generated.
+
+.SH OPTIONS
+
+The following basic switches are always required and have no default value, except for 
+--proc which is optional.
+
+.B -c, --cname container
+.RS
+Specify a container name to use for these tests.  If --utc is specified it will have the
+UTC time appended to it.  Depending on the value of --ctype it may also have the node's
+rank and process number appended as well.
+.RE
+
+.B -n, -nobjects number | --runtime secs
+.RS
+You must specify one or both switches, where n specifies the number of objects
+to PUT, GET or DEL and secs specifies how long the test is to be run.  If
+both are defined the test will be terminated when the first condition is 
+satisfied.
+
+When running multiple processes and no runtime is specified, each PUT/GET/DEL
+will perform the same number of operations for each process.  However, if a runtime 
+is specified, getput will internally track how many PUTs were performed by each process,
+double the runtime and perform that number of operations for each process for
+subsequent GETs and DELs, assuring that all are always performed.
+
+If you are running the GET or DELETE tests independent of the initial PUT and are using
+multiple processes you can supply the number of objects each process wrote as a list of
+numbers with -n, separated by colons.  To get the list of how many objects were created 
+by each process see --numperproc.  This is what gpmulti does.
+.RE
+
+.B -o, --obj prefix
+.RS
+Select a prefix to be used for object naming.  The objects that are created
+will all have names of the format: prefix-rank-process-number.
+.RE
+
+.B -p, --policy policy
+.RS
+Specify a storage policy, the default being to use the default policy swift is
+configured to use.  This only applies to PUT tests and is applied at the time
+the named container is created.  If the container already exists, its policy
+must match.  For other tests, the container's policy must match.  
+.RE
+
+.B -s, --size size1,size2,etc
+.RS
+Size in bytes of the objects to PUT.  You can also specify K, M and G as a multiplier 
+which which correspond to powers of 1024.  If you specify multiple sizes separated by
+commas, the specified test(s) will be repeated for each size.
+.RE
+
+.B -t, --tests test(s)
+.RS
+Select one or more comma separated tests to run as p, g and/or d for PUT,
+GET and DELETE respectively.  As soon as one test completes, the next will be
+run noting that if you specify multiple processes with --proc, getput will wait
+for all tests of one type to complete before the next begins, insuring all 
+tests always start at the same time.
+
+After the DELETE test completes, the container will be removed, unless you specify
+--cont-nodelete.  If you have not first deleted all objects containera and use
+this switch, deletion will fail and will generate an error.
+
+There are actually 3 more tests available and those are random PUTs, GETs and
+DELETEs which are specified by uppercase P, G and D.  They can be mixed and
+matched with any other test but additional care may be required as explained in
+the section RANDOM I/O which can be found later in this man page.
+.RE
+
+.B -v
+.RS
+Print version and exit
+.RE
+.RE
+
+Output Format
+
+.B --echo
+.RS
+Print the getput command along with all its switches to stdout.   This can be
+usful when you wish to archive the output and want to remember what switches
+were used.
+.RE
+
+.B --ldist nummber
+.RS
+Include a latency histogram in the output of the form 0 1 2 3 4 5 10 20 30 40 50 secs,
+dividing by 10^number, which for --ldist 1 results in .0 .1 .2 etc.  These additional
+11 columns will contain the counts of the number of operations that fall in the 
+appropriate range.
+.RE
+
+.B --nohead
+.RS
+When a set of tests are run as specified by -t, a new output header is generated
+when the number of processes change.  This can be annoying and clutter the output,
+especially when run in batches by shell scripts or the gpmulti utility.  This switch
+will supress header printing.
+.RE
+
+.B --psum
+.RS
+In addition to reporting the totals for each test, this switch will cause individual
+process results to be reported as well.  The process results line will be identical
+to the summary line except that they will contain the process number (from 0 to
+number of processes-1) whereas the total will contain the value of --procs and be the
+last line reported for that particular test.
+.RE
+
+.B --putsperproc
+.RS
+When run standalone with multiple processes and using --runtime to control the duration
+of the tests, a different number of objects will most likely be written for each process
+and getput tracks this so on subsequent GETs or DELs, it know how many each process it
+should operate on since naming depends on process numbers.
+
+However, if you're controlling getput from a second script that may be executing tests
+one at a time, getput will have no knowlege of previous operations.  This switch will
+cause it to print an extra line of output containing the nubmers of objects written by
+each process like this, which in this case is for a 4 process PUT:
+
+PutsPerProc: 459:461:467:461
+
+A subsequent GET or DEL would then include these numbers with --nobjects rather than a
+single value like this:
+
+--nobjects 459:461:467:461
+
+.RE
+
+Behavioral Switches
+
+These switches change the running characteristics of getput as follows:
+
+.B --cont-nodelete
+.RS
+Since the typical behvior for a DELETE test is to empty a container, getput tries to
+be a good housekeeper by also deleting the container when done.  This switch will 
+disable this behavior.
+.RE
+
+.B --ctype type
+.RS
+By default, getput creates a container using the name specified by -c, with the
+optional UTC appeneded to it (see --utc), which results in all processes on all
+clients sharing the same container.  Naming can also be be explicitly controlled
+by specifying a type of:
+
+.B bynode
+.RS
+Containers will be named by the format: name-rank such that all processes on
+the same node share the same container.
+.RE
+
+.B byproc
+.RS
+Containers will be named by the format: name-rank-process such that all
+processes, regardless of where they run access a uniquely named container.
+.RE
+
+.B shared
+.RS
+Included for completeness, all processes on all clients share the same
+container.
+.RE
+.RE
+
+.B --errmax number
+.RS
+Use this switch to abort the current test if an excessive number of errors occur,
+the default is 5.  If you have specified multiple tests with -t, or multiple sizes
+or processes the next test will be executed.
+.RE
+
+.B --exclog name[:option]
+.RS
+Requires use of --latexc, will record exceptions in the named file.  By default, the
+file will created if it doesn't exist OR if the option 'c' is specified.
+.RE
+
+.B --latexc seconds[.msec][:{pg}]
+.RS
+If any operation reports a latency >= to this value, abort the testing.
+Optionally you can specify which operation to apply the test to.  In other words
+--latexc 1:g will only report latencies >= 1 sec for GETs
+.RE
+
+.B --logops
+.RS
+Generate a detailed log file in /tmp, named for the type of the test and the
+start time in utc.  By default, each record will contain the start/end times
+of each operation, the latency and container/object names.
+
+One can also change the behavior of logging to include more details about test
+start/stop times and optionally exclude the detailed operational data by using
+--debug.
+.RE
+
+.B --mixopts
+.RS
+There is currently one option for mixed tests and this is m, which when present
+with result in 2 extra summary lines being printed ahead of the totals for the
+test. The first will contain a summary of the PUT tests adn the next the for
+the GET tests.
+.RE
+
+.B --objopts
+.RS
+Select one or more options to control object naming/behavior
+
+.B a
+.RS
+Only for non-random PUTs, objects will be appended to a container and if it
+doesn't exist create it.
+.RE
+.B c
+.RS
+Objects themselves will be created out of a repeating byte string making them
+highly compressible.
+.RE
+.B f
+.RS
+Objects will be named as a flat namespace using an single incrementing count.
+.RE
+.B mxxx
+When objects are created by multiple processes, the process number becomes part
+of the object name OR is included before hashing into a random string. On rare
+occasions it may be desireable to access those objects using a higher process
+count than was used to create them. By specifying xxx, this is applied as a
+modulus against the process number to assume a valid process number is always
+used.
+.RE
+.B r[xxx]
+.RS
+Use 128 byte random object names by generating a sha512 digest based on the
+objects ordinal numbering.  You can optionally specify an object name length.
+.RE
+.B u
+.RS
+The base name of an object will have the UTC time appended, making it possible
+to do sequential appends to an existing container.
+.RE
+.RE
+
+.B --objoffset num
+.RS
+When accessing flat hierarchies (not clear if really needed now that random
+object names are supported for large containers), start object names using
+this as an object instance number.
+.RE
+
+.B --objseed num
+.RS
+Specify a seed to be appened to an object name before generating a random name,
+the default is the string 0.
+.RE
+
+.B --preauthtoken token
+.RS
+The first thing getput does is to make a connction requested based on the user's
+credentials and from that saves a copy of the authentication token that has been
+granted which it then uses with subsequent calls.  This value will override that
+value.
+.RE
+
+.B --procs num1,num2,etc
+.RS
+Number of processes to start in parallel, each running their own copy of getput
+with the specified switches.  They will all start at the same time and if --runtime
+is specified will finish as soon as the current operation has completed after that
+time is reached, which means they may not all finish at the exactly the same time.
+If running with only -n, there could be an even more staggered finish.
+
+If more than one number is specified as a comma separated list, getput will iterate
+through that list and all tests will be rerun using that number as the number of
+processes.  If --utc is not specified, the container names will be reused.
+
+Unless --ctype byprocess is specified, all processes will write their objects to 
+the same container.
+.RE
+
+.B --proxies proxy1,proxy2,etc
+.RS
+This instructs getput to talk directly to proxies doing its own load balancing based
+on process number and rank.  When specified, the address specified in OS_AUTH_URL
+will be replaced by one of these for each new connection.  The debug switch of -d64
+can be very handy in tracking down connection problems as it will show all the
+values used for each connection as it's made.
+.RE
+
+.B --quiet
+.RS
+Do not display warnings or errors
+.RE
+
+.B --quiton404
+.RS
+When an object cannot be found for a GET or DELETE operation, quit without an error.
+.RE
+
+.B --range r1-r2[,r3-r4...]
+.RS
+For each GET operation, retrieve a subset of bytes starting at offet r1 and ending
+inclusively as offset r2. In fact there are multiple formats --range supports and
+whatever is specified is passed along in the REST interface
+.RE
+
+.B --repeat number
+.RS
+Repeat all combinations of tests this number of times.  Note that this switch
+is typically expected to apply to a simple number of test parameter combinations,
+such as repeating a number of puts or puts/gets for possibly multiple object
+sizes.  The intent here is to try to keep the output cleaner and not repeat
+the headers continually, particularly if all you're doing is repeating a put
+test 5 times, so when this switch is used, the headers will only be reported once.
+.RE
+
+.B --retries number
+.RS
+Specifies the number of times to retry an operation so you don't have to.  The default
+is 5.  Setting this to 0 means you will most likely have to handle failures yourself
+since they are unavoidable.
+
+
+If you are running getputs on multiple nodes and do not at least have 1 running with a
+rank of 0, all GETs will fail with a 404.
+.RE
+
+.B --retry-on-ratelimit
+.RS
+In cases swift is doing rate limiting (response code 498) a client
+should react with an exponential backoff. This is already implemented
+in swiftclient but has to be activated during creation of the
+connection pool.
+.RE
+
+.B --scheme [http|https][:[address]]
+.RS
+After getput is authenticated, a url is returned which is then used for future
+communications.  During development/testing, it may be desireable to override
+the connection scheme changing it from http to https or the other way around.
+One may also wish to change the port.  Both these are accomplished via this
+switch.  To verify the correct behavior occuring you can use -d64 to report
+connection details.
+
+If you also use --proxies in conjunction with --scheme, those same settings
+will be applied when building the proxy urls as well.
+.RE
+
+.B --s3
+.BR
+Communicate to the object store using S3 credentials. Use of this switch also
+requires the python boto package is installed. Use the command:
+
+pip install boto.
+.RE
+
+.B --sleeps string
+.RS
+There are 3 places one can insert a sleep into the testing process, either at the
+end of a single test such as a PUT, GET or DELETE, the end of a set of tests as
+specified by -t, or at the end of a process as specified with --procs.  These are
+specified with this single switch as there are already too many of them.  The
+format is the 3 different sleep times separated by colons like this:
+
+.RS
+--sleeps [test-sleeps][:endoftest-sleeps[:endofproc-sleeps]]
+.RE
+
+So to sleep 3 seconds only at the end of a set of tests and nowhere else, use the
+switch --sleeps :3. To only sleep between tests, choose --sleeps 1.
+
+NOTE - if you specify multiple values for sleeps they will all be applied as
+appropriate.  Also note the final sleep(s) at the end of the final test will
+never be applied.
+
+To see exactly how the sleeps are applied include -debug 256.
+.RE
+
+.B --warnexit
+.RS
+When warnings for latency exceptions or --errmax being exceeded are reported,
+processing continues.  This switch will direct getput to exit.
+.RE
+
+Multi-node required switches
+
+.B --creds file
+.RS
+Since tests are typically started on multiple test clients via ssh, you need
+to include the name of a credentials file for that remote copy to use as 
+described earlier.  The file must be in the same directory on all clients and
+contain entries of the exact format shown earlier in the Authentication section.
+.RE
+
+.B --rank number
+.RS
+If you are running multiple copies of getput, in order to prevent the same object
+names from being used by each instance, the rank specifies a number that will be
+used in the object name to insure uniqueness.  If not, multiple instances will
+access the same object number and in the case of DELETES, errors will occur.
+.RE
+
+.B --sync utc
+.RS
+getput will stall until the specified UTC time is reached before starting a test
+thereby allowing tests run on multiple machines to start at the same time.  If
+the time has already passed a warning message will be reported, but the test
+will still be allowed to run.
+.RE
+
+.B --utc
+.RS
+Append the UTC time of the beginning of a set of tests to the container name being 
+operated on, assuring a brand new container will be used for each test and eliminate
+possible re-use or caching effects.
+.RE
+
+Development/Testing
+
+.B -d, --debug mask
+.RS
+This switch is provided for testing and debugging, typically used when something
+doesn't run as expected. To use it see the list of values in the beginning of
+getput and OR together all those you're intested in using.  The best one to start
+with is 1.
+.RE
+
+.SH GETTING STARTED
+
+Before you can run any tests, you first need install python-swiftclient
+create a credentials file which you can then source.  This is much easier
+than manually defining the environment vabiables each time you log in for the
+first time.
+
+To make sure your credentials are correct, run 'swift stat' and you should
+see something.  If not and it hangs, your credentials have not been defined
+correctly.  Once the stat command works, you are ready to try some of the
+examples in the next section.  You can also use the 'swift list container'
+command to verify a container's contents and assure yourself that your first
+PUT test really worked.
+
+.SH EXAMPLES
+
+Using 1K objects, do 100 puts to a container named cont, creating
+object names of the form obj-0-0-1 thru obj-0-0-100
+
+getput.py -ccont -oobj -n100 -s1k -tp
+
+Verity the test example worked via 'swift list cont' and then yuo can 
+read them back and delete them
+
+getput.py -ccont -oobj -n100 -s1k -tg,d
+
+
+Repeat the same test but using 4 threads by appending the switch --procs 4.  Now 
+names will look like obj-0-0-1, obj-0-1-1, obj-0-2-1 and obj-0-3-1 for the first object 
+written by each process.  This test will result in 400 objects being created.
+
+getput.py -ccont -oobj -n100 -s1k -tp,g,d --procs 4
+
+Appending the switch -r10 will run the 3 tests 10 times resulting in 4000 objects
+being created but the 400 names are reused for all 10 sets.
+
+getput.py -ccont -oobj -n100 -s1k -tp,g,d --procs 4 -r10
+
+Sometimes you want to see what happens when you recreate an object, by doing a
+second PUT using the same name without first deleting it.  Other times you may
+want to GET an object with the same name to measure the effects of caching.  To
+do this simply change -tp,g,d to -tp,p,g,g,d.  While there are still only 100 
+objects involved if using -n100 and not using -r or --procs, you're now doing 5 
+operations on each object instead of the original 3.
+
+getput.py -ccont -oobj -n100 -s1k -tp,p,g,g,d
+
+You may also want to run a test for a specific duration in which case not all
+processes complete at the same time.  The following test will run for about 30 
+seconds, since each test is allowed to finish operating on the current object.
+Further, since on occasion the GETs or DELs can actually take longer than the
+original PUTs, the runtime allowed for these tests to complete is actually 
+doubled.
+
+getput.py -ccont -oobj -s1k -tp,g,d --runtime 30 --procs 4
+
+Finally, but certainly not all the possibilies available to you, you can run a large
+set of tests with a single command.  Consider the following, my personal favorite,
+which will run 30 sets of tests and take over an hour to complete:
+
+getput.py -ccont -oobj -s1k,10k,100k,1m,10m,100m -tp,g,d --runtime 60 --procs 1,2,4,8,16
+
+.SH RESTRICTIONS
+
+.SH AUTHOR
+
+This program was written by mark Seger (mjseger@gmail.com)
+.br
+Copyright 2013-2015 Hewlett-Packard Development Company, LP
