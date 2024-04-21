@@ -1,0 +1,2530 @@
+#!/usr/bin/python -u
+
+# Copyright 2015 Hewlett-Packard Development Company, L.P.
+# Use of this script is subject to HP Terms of Use at
+# http://www8.hp.com/us/en/privacy/terms-of-use.html.
+
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+
+#    http://www.apache.org/licenses/LICENSE-2.0
+
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# debug
+#    1 - print some basic stuff. inclucing test starts info
+#    2 - show more details about process startup/shutdown
+#    4 - report container header info
+#    8 - show name of container being used
+#   16 - show inputs for starting multiprocessing
+#   32 - show trandIDs/latencies, only make sense for small values of -n
+#   64 - show connection information
+#  128 - trace execution to log in /tmp
+#  256 - report end of test/set/proc sleeps
+# 1024 - report object etag
+
+# logops masks
+#   1 - log all latencies
+#   2 - log traces [type 3 calls]
+#   4 - log latencies > :latency
+
+import sys
+import os
+import re
+import struct
+import random
+import requests
+import signal
+import socket
+import string
+import time
+import inspect
+import cStringIO
+import requests
+import md5
+import hashlib
+from random import randint
+from optparse import OptionParser, OptionGroup
+from multiprocessing import Pool, Value
+from urlparse import urlparse
+from swiftclient import Connection
+from swiftclient import ClientException
+from swiftclient import put_object
+
+# This is for process synchronization and warning/error threshold secs
+counter = None
+threshold_conn = 5
+threshold_hang = 300 
+
+
+# Handy for tracing execution of getput itself
+def logexec(text):
+
+    if debug & 128:
+        logfile = '/tmp/getput-exec-%s.log' % (time.strftime('%Y%m%d'))
+        log = open(logfile, 'a')
+        log.write('%s %s\n' % (time.strftime('%H:%M:%S', time.gmtime()), text))
+        log.close()
+
+
+def exclogger(text):
+
+    exc = open(exclog, 'a')
+    exc.write("%s\n" % text)
+    exc.close()
+
+
+def error(text, exit_flag=True):
+    """
+    Main error reporting, usually exits
+    """
+
+    print "Error -- Host: %s getput: %s" % (hostname, text)
+    if exit_flag:
+        sys.exit(0)
+
+
+def build_object():
+    """
+    build a fixed length non-compressible object (unless --objopts
+    is 'c') based on size specified by -s
+    """
+
+    global md5_digest
+
+    # build a fixed size object of appropriate size with RANDOM bytes so we can
+    # be sure they all get transfered and not compressed, but if '--objopts c'
+    # use all the same so we WILL.  join() a lot faster than +
+    temp = ''
+    count = 0
+    if not options.objopts or not re.search('c', options.objopts):
+        while (count < (32 * 1024)):
+            num = int(random.random() * 255)
+            temp = ''.join([temp, struct.pack('B', num)])
+            count = count + 1
+    else:
+        temp = ' ' * 32 * 1024
+
+    # replicate it exponentially for speed
+    fixed_object = temp
+    while (len(fixed_object) < osize):
+        fixed_object = ''.join([fixed_object, fixed_object])
+
+    # trim it down if necessary
+    fixed_object = fixed_object[:osize]
+
+    m = md5.new()
+    m.update(fixed_object)
+    md5_digest = m.hexdigest()
+    if debug & 1024:
+        print "Obj MD5:", md5_digest
+
+    return(fixed_object)
+
+
+def md5check(oper, cname, objname, response, md5_digest):
+
+    etag = response['headers']['etag']
+    if etag != md5_digest:
+        txid = response['headers']['x-trans-id']
+        print "MD5 Error - on %s, TransID: %s for %s/%s, %s != %s" % \
+            (oper, txid, cname, objname, md5_digest, etag)
+
+def reset_last(num_procs):
+    """
+    Sets the ending object numbers for each process to get, put or delete
+
+    some explanation needed...  last[] contains the max number of objects to
+    PUT, GET or DELETE per process.  In the case of multiple sets of tests,
+    these need to be reset to the original value specified with -n and if a
+    single value spread across all procs. Since a PUT test also resets last[]
+    to contain actual number of objects so GET/DEL will need to know how many
+    there are.  The errors can only happen looking at original values of -n.
+    """
+
+    global last
+
+    last = []
+    if options.nobjects and re.search(':', options.nobjects):
+        for string in options.nobjects.split(':'):
+            try:
+                last.append(int(string))
+            except ValueError:
+                error('-n must be a set of : separated integers')
+    else:
+        for i in range(num_procs):
+            # reset everything to what was specified with -n and if not there
+            # we already know there's a runtime so set a huge max objects
+            if options.nobjects:
+                numobj = int(options.nobjects)
+            else:
+                numobj = 999999
+
+            try:
+                last.append(numobj)
+            except ValueError:
+                error('-n must be an integer')
+
+
+def getenv(varname):
+    """
+    get value for environment variable
+    """
+
+    try:
+        value = os.environ[varname]
+    except KeyError:
+        value = ''
+    return(value)
+
+
+def parse_creds(creds_file=None):
+    """
+    parse credentials either from environment OR credentials file
+    """
+
+    # remember, --creds overrides environment
+    stnum = 0
+    stvars = {}
+    for varname in ['ST_AUTH', 'ST_USER', 'ST_KEY']:
+        stvars[varname] = getenv(varname)
+        if stvars[varname] != '':
+            stnum += 1
+
+    osnum = 0
+    osvars = {}
+    for varname in ['OS_AUTH_URL', 'OS_USERNAME', 'OS_PASSWORD', \
+                        'OS_TENANT_ID', 'OS_TENANT_NAME', \
+                        'OS_PROJECT_NAME', 'OS_PROJECT_ID', \
+                        'OS_PROJECT_DOMAIN_NAME', 'OS_PROJECT_DOMAIN_ID', \
+                        'OS_USER_DOMAIN_NAME', 'OS_USER_DOMAIN_ID', \
+                        'OS_REGION_NAME', 'OS_SERVICE_TYPE', 'OS_AUTH_VERSION', \
+                        'OS_ENDPOINT_TYPE', 'OS_IDENTITY_API_VERSION', \
+                        'OS_STORAGE_URL', \
+                        'OS_SWIFTCLIENT_INSECURE', 'OS_CACERT', 'OS_CERT']:
+        osvars[varname] = getenv(varname)
+        if osvars[varname] != '':
+            osnum += 1
+
+    rgwnum = 0
+    rgwvars = {}
+    for varname in ['RGW_ACCESS_ID', 'RGW_SECRET_KEY', 'RGW_HOST', 'RGW_PORT']:
+        rgwvars[varname] = getenv(varname)
+        if rgwvars[varname] != '':
+            rgwnum += 1
+
+    if creds_file:
+        try:
+            f = open(creds_file, 'r')
+            for line in f:
+                if re.match('\#|\s*$', line):
+                    continue
+                line = line.rstrip('\n')
+                search = re.search('(ST|OS|RGW|SWIFTCLIENT)_(.*)=(.*)', line)
+                if search:
+                    value = search.group(3).strip(";'\"")
+                    if search.group(1) == 'ST':
+                        stvars["ST_" + search.group(2)] = value
+                        stnum += 1
+                    elif search.group(1) == 'OS':
+                        osvars["OS_" + search.group(2)] = value
+                        osnum += 1
+                    elif search.group(1) == 'RGW':
+                        rgwvars["RGW_" + search.group(2)] = value
+                        rgwnum += 1
+                    elif search.group(1) == 'SWIFTCLIENT':
+                        osvars["SWIFTCLIENT_" + search.group(2)] = value
+                        osnum += 1
+
+        except IOError, err:
+            error("Couldn't read creds file: " + creds_file)
+
+    if not s3:
+        if stnum > 0 and  osnum > 0:
+            error('you have both ST_ and OS_style varibles defined' + \
+                  ' in your environment and you must only have 1 type')
+        if stnum > 0 and stnum != 3:
+            error('you have at least 1 ST_ style variable defined but not all 3')
+        if osnum > 0:
+            if osvars['OS_AUTH_URL'] == '' or osvars['OS_USERNAME'] == '' \
+                                       or osvars['OS_PASSWORD'] == '':
+                error('your environment has at least 1 OS_ style variable ' + \
+                      'defined but not OS_AUTH_URL, OS_USERNAME or OS_PASSWORD')
+            if osvars['OS_TENANT_NAME'] == '' and osvars['OS_TENANT_ID'] == '' \
+                                          and osvars['OS_PROJECT_NAME'] == ''\
+                                          and osvars['OS_PROJECT_ID'] == '':
+                error('your environment has at least 1 OS_ style variable ' + \
+                      'defined but not OS_TENANT_NAME, OS_TENANT_ID or ' + \
+                      'OS_PROJECT_NAME, OS_PROJECT_ID')
+
+        username = password = authurl = ''
+
+        if stnum > 1:
+            authurl = stvars['ST_AUTH']
+            username = stvars['ST_USER']
+            password = stvars['ST_KEY']
+        elif osnum > 1:
+            authurl = osvars['OS_AUTH_URL']
+            del osvars['OS_AUTH_URL']
+            username = osvars['OS_USERNAME']
+            del osvars['OS_USERNAME']
+            password = osvars['OS_PASSWORD']
+            del osvars['OS_PASSWORD']
+
+        return((authurl, username, password, osvars))
+
+    # I hate multiple returns, but given the way this is called it makes things lot easier
+    else:
+        rgw_access_id = rgwvars['RGW_ACCESS_ID']
+        rgw_secret_key = rgwvars['RGW_SECRET_KEY']
+        rgw_host = rgwvars['RGW_HOST']
+        rgw_port = rgwvars['RGW_PORT']
+        if rgw_access_id == ''  or rgw_secret_key == '' or rgw_host == '' or  rgw_port == '':
+	    error("not all 4 s3 access variables specified with --creds or found in environment")
+
+        return((rgw_access_id, rgw_secret_key, rgw_host, rgw_port))
+
+def main(argv):
+    """
+    read/parse switches
+    """
+
+    global debug, options, procset, sizeset, ldist10, s3
+    global username, password, authurl, osvars, errmax
+    global latexc_min, latexc_max, latexc_filt, exclog, excopt, \
+		 sha_size, obj_max_proc, put_test, put_test_first
+
+    ldist10 = 0
+    procset = [1]
+    latexc_min = latexc_max = 9999
+
+    parser = OptionParser(add_help_option=False)
+    group0 = OptionGroup(parser, 'these are the basic switches')
+    group0.add_option('-c', '--cname',    dest='cname',
+                      help='container name')
+    group0.add_option('-d', '--debug',    dest='debug',
+                      help='debugging mask', default=0)
+    group0.add_option('-n', '--nobjects', dest='nobjects',
+                      help='containter/object numbers as a value OR range')
+    group0.add_option('-o', '--obj',      dest='oname',
+                      help='object name prefix')
+    group0.add_option('-p', '--policy',   dest='policy',
+                      help='container storage policy', default='')
+    group0.add_option('-r', '--runtime',  dest='runtime',
+                      help="runtime in secs")
+    group0.add_option('-s', '--size',     dest='sizeset',
+                      help='object size(s)')
+    group0.add_option('-t', '--tests',    dest='tests',
+                      help='tests to run [gpd]')
+    group0.add_option('-h', '--help', dest='help',
+                      help='show this help message and exit',
+                      action='store_true')
+    group0.add_option('-v', '--version',  dest='version',
+                      help='print version and exit',
+                      action='store_true')
+    parser.add_option_group(group0)
+
+    groupa = OptionGroup(parser, 'these switches control the output')
+    groupa.add_option('--echo',     dest='echo',
+                      help='echo command', action='store_true')
+    groupa.add_option('--ldist',    dest='ldist',
+                      help="report latency distributions at this granularity")
+    groupa.add_option('--nohead',   dest='nohead',
+                      help="do not print header with results",
+                      action='store_true', default=False)
+    groupa.add_option('--psum',     dest='psum',
+                      help="include process summary in output",
+                      action='store_true', default=False)
+    groupa.add_option('--putsperproc', dest='putsperproc',
+                      action='store_true', default=False,
+                      help='list numbers of puts by each process')
+    parser.add_option_group(groupa)
+
+    groupc = OptionGroup(parser, 'these switches effect behavior')
+    groupc.add_option('--cont-nodelete', dest='cont_nodelete',
+                      help="do not delete container after a delete test",
+                      action='store_true', default=False)
+    groupc.add_option('--ctype',    dest='ctype', default='byproc',
+                      help="container type: shared|bynode|byproc")
+    groupc.add_option('--errmax',   dest='errmax',
+                      help="quit after this number of errors, [def=5]",
+                      default=5)
+    groupc.add_option('--exclog',   dest='exclog',
+                      help="write latencies to log instead or terminal")
+    groupc.add_option('--extra',   dest='extra',
+                       help="defined value for X-Trans-Id-Extra")
+    groupc.add_option('--headers',   dest='headers',
+                       help="additional headers")
+    groupc.add_option('--insecure', dest='insecure',
+                      action='store_true', default=False,
+                      help="allow access without verifying SSL certs")
+    groupc.add_option('--latexc',   dest='latexc',
+                      help="stop when max latency matches exception")
+    groupc.add_option('--logops',   dest='logops',
+                      help="log latencies for all operations",
+                      default='0')
+    groupc.add_option('--mixopts', dest='mixopts', default='',
+                      help='mixed test options [m]')
+    groupc.add_option('--objopts',    dest='objopts', default='',
+                      help='object options [acfmru]')
+    groupc.add_option('--objoffset',    dest='objoffset', default='0',
+                      help='object number offset for flat hierarchies')
+    groupc.add_option('--objseed',    dest='objseed', default='0',
+                      help='seed for random object naming')
+    groupc.add_option('--printheader', dest='printheader',
+                      action='store_true',
+                      help="print a one line header and exit")
+    groupc.add_option('--preauthtoken', dest='preauthtoken',
+                      default='',
+                      help="use this rather then the one returned")
+    groupc.add_option('--procs',    dest='procset',
+                      help="number of processes to run")
+    groupc.add_option('--proxies',   dest='proxies', default='',
+                      help='bypass load balancer and connect directly')
+    groupc.add_option('--quiet',   dest='quiet', default=False,
+                      help='suppress api errors & sync time warnings',
+                      action='store_true')
+    groupc.add_option('--quiton404', dest='quiton404',
+                      help='exit 404', action='store_true')
+    groupc.add_option('--range',   dest='range', default='',
+                      help='get object by this range')
+    groupc.add_option('--repeat',   dest='repeats',
+                      help='number of time to repeat --num tests')
+    groupc.add_option('--retries',  dest='retries', default='5',
+                      help='number of time to retry failed test')
+    groupc.add_option('--retry-on-ratelimit', dest='retry_on_ratelimit',
+                      help='Let swift client retry on ratelimit hit', action='store_true')
+    groupc.add_option('--sleeps',   dest='sleeps',
+                      help='times to sleep at various test points')
+    groupc.add_option('--s3', dest='s3', action='store_true',
+                      help='use s3 api')
+    groupc.add_option('--scheme',   dest='scheme', default='',
+                      help='authurl connection scheme, http|https')
+    groupc.add_option('--warnexit', dest='warnexit',
+                      help='exit on warnings', action='store_true')
+    parser.add_option_group(groupc)
+
+    groupb = OptionGroup(parser, 'multi-node access')
+    groupb.add_option('--creds',    dest='creds',
+                      help='credentials')
+    groupb.add_option('--rank',     dest='rank',
+                      help='rank among clients, used in obj/container names',
+                      default='0')
+    groupb.add_option('--sync',     dest='synctime',
+                      help='time, in seconds since epoch, to start test')
+    groupb.add_option('--utc',     dest='utc',
+                      action='store_true', default=False,
+                      help='append utc time to container names')
+    parser.add_option_group(groupb)
+
+    try:
+        (options, args) = parser.parse_args(argv)
+    except:
+        print 'invalid command'
+        sys.exit()
+
+    if options.help:
+        parser.print_help()
+        sys.exit()
+
+    if options.version:
+        print 'getput V%s\n\n%s' % (version, copyright)
+        sys.exit()
+
+    s3 = options.s3
+    if s3:
+        global boto
+
+	import boto
+        import boto.s3.connection
+
+    # we have to do before printheader() in case we want
+    # to include latency historgram headers
+    if options.ldist:
+        try:
+            if int(options.ldist) > 3:
+                error("--ldist > 3 not supported")
+        except ValueError:
+            error('--ldist must be an integer')
+        ldist10 = 10 ** int(options.ldist)
+
+    if options.printheader:
+        print_header()
+        sys.exit()
+
+    #    G e t    C r e d e n t i a l s    f r o m    E n v    o r    C r e d s    F i l e
+
+    if not s3:
+        (authurl, username, password, osvars) = parse_creds(options.creds)
+        if username == '' or password == '' or authurl == '':
+            error('specify credentials with --creds OR set ST_* variables')
+    else:
+	(rgw_access_id, rgw_secret_key, rgw_host, rgw_port) = parse_creds(options.creds)
+
+        # big time hack to make easier to constently call connect()
+        username = rgw_access_id
+        password = rgw_secret_key
+        authurl = rgw_host + ':' + rgw_port
+        osvars = {}
+
+    try:
+        debug = int(options.debug)
+    except:
+        error('-d must be an integer')
+
+    try:
+        errmax = int(options.errmax)
+    except ValueError:
+        error('--errmax must be an integer')
+
+    #     R e q u i r e d :   - - t e s t s    &    - - c n a m e
+
+    # note -- mixed_test means one of possibly multiple tests is mixed but we
+    # don't know which one(s). We also need to know if there was a pure PUT
+    # test preceding the first mixed test and for that use put_test_first.
+    if options.tests:
+	put_test = put_test_first = mixed_test = False
+	for test in options.tests.split(','):
+	    if not re.match('^p\d+g\d+$', test) and not re.match('^[pgd]$', test):
+		error('-test must be combinations of p, g, d and pxgy')	
+	    if test == 'p':
+		put_test = True
+	    if re.match('^p\d+g\d+$', test):
+		mixed_test = True
+		num = options.nobjects
+		if put_test:
+		    put_test_first = True
+    		if not put_test and (not num or not re.search(':', num)):
+        	    error("mixed workload must be preceeded by 'p' test OR include putsperproc with -n")
+    else:
+        error('define test list with -t')
+
+    if options.mixopts:
+        if options.mixopts != 'm':
+	    error("only valid value for --mixopts is 'm'")
+
+    # cname and oname actually defined in init_test()
+    if not options.cname:
+        error('specify container name with -c')
+
+    obj_max_proc = 0    # only set when 'm' option
+    if options.objopts:
+        # if you include 'r', you can optionally include a length too, so
+        # first remove everything but the 'r', 'm' and digits
+        objopts = re.sub('[acfu]*', '', options.objopts)
+        if re.search('r', objopts):
+            match = re.search('r(\d*)', objopts)
+            sha_size = 128 if match.group(1) == ''  else int(match.group(1))
+            objopts = re.sub(match.group(0), '', objopts)
+        if re.search('m', objopts):
+	    if options.ctype != 'shared':
+		error("--objopts m only makes sense with shared containers")
+            match = re.search('m(\d*)', objopts)
+            if match.group(1):
+		obj_max_proc = int(match.group(1))
+                objopts = re.sub(match.group(0), '', objopts)
+	    else:
+		error("--objopt requires max procs")
+        if objopts != '':
+            error("unknown --objopts values: %s" % objopts)
+
+    if options.objoffset and options.objoffset != '0':
+        try:
+            objoffset = int(options.objoffset)
+        except ValueError:
+            error("--objoffset must be an integer")
+        if re.search('a', options.objopts):
+            error("--objnum and append mode are mutually exclusive")
+	if not re.search('f', options.objopts):
+            error("--objoffset only makes sense for flat hierarchies")
+        try:
+            objoffset = int(options.objoffset)
+        except ValueError:
+            error("--objoffset must be an integer")
+
+    #    T e s t    D e p e n d e n t    S w i t c h e s
+
+    if options.range != '':
+        #if not re.search('g', options.tests):
+        #    error("--range only applies to 'get' tests")
+        for value in options.range.split(','):
+            if not re.match('\d+-\d+$', value):
+                error("range '%s' must be in min-max format" % (value))
+
+    if re.match('[gpd]', options.tests):
+        if not options.oname:
+            error('get, put and delete tests require object name')
+
+    if options.sizeset:
+        if re.search(',', options.sizeset):
+            if not re.match('p', options.tests):
+                error('multiple obj sizes require PUT test')
+
+        sizeset = []
+        for size in options.sizeset.split(','):
+            match = re.match('(\d+)([kmg]?\Z)', size, re.I)
+            if (match):
+                sizeset.append(size)
+            else:
+                error('object size must be a number OR number + k/m/g')
+    else:
+        error('object size required')
+
+    #    O p t i o n a l
+
+    if options.procset:
+        procset = []
+        for p in options.procset.split(','):
+            try:
+		proc = int(p)
+                procset.append(proc)
+            except ValueError:
+                error('--procs must be an integer')
+
+	    # a real pain but we have to recheck for each value of --procs
+	    for test in options.tests.split(','):
+                match = re.search('p(\d+)g(\d+)', test)
+		if match:
+                    tot = int(match.group(1)) + int(match.group(2))
+		    min = int(proc/tot)
+		    if min * tot != proc:
+		       error("--procs %s not even multiple of %s" % (p, test))
+
+    if options.runtime:
+        if not re.match('\d+$', options.runtime):
+            error('--runtime must be an integer')
+
+    if options.ctype != None:
+        if not re.match('shared|bynode|byproc', options.ctype):
+            error("invalid ctype, expecting: 'shared|bynode|byproc'")
+
+    if options.rank and not re.match('\d+$', options.rank):
+        error('--rank must be an integer')
+
+    # initialze last[] for all processes based on first value of -n
+    if options.nobjects:
+        reset_last(procset[0])
+    elif not options.runtime:
+        error('specify at least one of -n and/or --runtime')
+
+    if options.repeats and not re.match('\d+$', options.repeats):
+        error('-r must be an integer')
+
+    if options.synctime and not re.match('\d+$', options.synctime):
+        error('sync time must be an integer')
+
+    if args:
+        print "Extra command argument(s):", args
+        sys.exit()
+
+    if options.latexc:
+        latexc_filt = 'pg'
+        pieces = options.latexc.split(':')
+        if len(pieces) > 1:
+            options.latexc = pieces[0]
+            latexc_filt = pieces[1]
+            if not re.match('[pgd]+$', latexc_filt):
+                error('--latexc filter must be combination of p and g')
+
+        if re.search('-', options.latexc):
+            latexc_min, latexc_max = options.latexc.split('-')
+        else:
+            latexc_min = options.latexc
+            latexc_max = 9999
+
+        latexc_min = float(latexc_min)
+        latexc_max = float(latexc_max)
+
+    if options.exclog:
+        if not options.latexc:
+            error('--exclog required --latexc')
+        if re.search(':', options.exclog):
+            exclog, excopt = options.exclog.split(':')
+            if excopt != 'c':
+                error('only valid --excopt options is c')
+        else:
+            exclog = options.exclog
+            excopt = ''
+
+
+def cvtFromKMG(str):
+    """
+    converts a string containing K, M or G to its equivilent number
+    """
+
+    # remember, we already verify sizeset[]
+    match = re.match('(\d+)([kmg]?\Z)', str, re.I)
+    size = int(match.group(1))
+    type = match.group(2).lower()
+    if type == '':
+        objsize = size
+    if type == 'k':
+        objsize = size * 1024
+    elif type == 'm':
+        objsize = size * 1024 * 1024
+    elif type == 'g':
+        objsize = size * 1024 * 1024 * 1024
+    return(objsize)
+
+
+def cvt2KMG(num):
+    """
+    converts a string which is a multiple of 1024 to the form: number[KMG]
+    """
+
+    # only do this is exact multiple of 1024
+    temp = num
+    suffix = ''
+    if (int(num / 1024) * 1024 == num):
+        modifiers = 'kmg'
+        while(temp > 1023):
+            temp = temp / 1024
+            suffix = modifiers[0]
+            modifiers = modifiers[1:]
+    return(str(temp) + suffix)
+
+
+native_close = True
+if not hasattr(Connection, 'close'):
+    native_close = False
+
+    class MyConnection(Connection):
+
+        def close(self):
+            if self.http_conn:
+                self.http_conn[1].close()
+
+
+def connect(authurl, username, password, osvars, \
+                preauthurl=None, preauthtoken=None):
+    """
+    make a connection using swift or s3 api
+    """
+
+    if s3:
+        s3_access_key = username
+        s3_secret_key = password    
+        s3_host, s3_port = authurl.split(':')
+        s3_port = int(s3_port)
+
+        if debug & 64:
+            print "Connect - Access: %s Secret: %s Host: %s Port: %s" % \
+                (s3_access_key, s3_secret_key, s3_host, s3_port)
+
+	try:
+            connection = boto.connect_s3(
+            aws_access_key_id = s3_access_key,
+            aws_secret_access_key = s3_secret_key,
+            host = s3_host,
+            #is_secure=False,               # uncomment if you are not using ssl
+            calling_format = boto.s3.connection.OrdinaryCallingFormat(),
+            port=s3_port,
+            )
+        except Exception as err:
+            import traceback
+            print "Connect failure: %s" % err
+            logexec('connect() exception: %s %s' % (err, traceback.format_exc()))
+            return(-1)
+
+	if debug & 64:
+            print "Connected to S3", connection
+        return(connection)
+
+    if osvars['OS_AUTH_VERSION'] != '':
+        auth_version = osvars['OS_AUTH_VERSION']
+    elif osvars['OS_IDENTITY_API_VERSION'] != '':
+        auth_version = osvars['OS_IDENTITY_API_VERSION']
+    elif re.search('v1.0', authurl):
+        auth_version = '1.0'
+    elif re.search('v2.0', authurl):
+        auth_version = '2.0'
+    elif re.search('v3', authurl):
+        auth_version = '3'
+
+    # simple 1:1 mapping to parameter value
+    cacert = None
+    if 'OS_CACERT' in osvars:
+        cacert = osvars['OS_CACERT']
+
+    if 'OS_STORAGE_URL' in osvars:
+        osvars['object_storage_url'] = osvars['OS_STORAGE_URL']
+
+    if osvars['OS_SWIFTCLIENT_INSECURE'] != '':
+        insecure = osvars['OS_SWIFTCLIENT_INSECURE']
+    else:
+        insecure = options.insecure
+
+    insecure = 1
+    retries = int(options.retries)
+
+    # these get specified in opts dictionary noting BOTH tenant_id
+    # and _name must be defined in dictionary
+    os_options = {}
+    for key, value in osvars.iteritems():
+        if value == "":
+            continue
+        key = key.replace("OS_", "")
+        key = key.lower()
+        os_options[key] = value
+
+    if preauthurl != None:
+        authurl = ''
+    if debug & 64:
+        print "Connect - User: %s Key: %s Options: %s" % \
+            (username, password, os_options)
+        print "Connect - Retries: %d AuthVer: %s AuthURL: %s" % \
+            (retries, auth_version, authurl)
+        print "Connect - Insecure: %s  Cert: %s" % \
+            (insecure, cacert)
+        print "Connect - PreauthURL: %s PreauthToken: %s" % \
+            (preauthurl, preauthtoken)
+    # get the connection object
+    if preauthurl:
+        logexec('connect - PreauthURL: %s  PreauthToken: %s' % \
+                    (preauthurl, preauthtoken))
+    try:
+        response = {}
+        if native_close:
+            connection = \
+                Connection(authurl=authurl,
+                             user=username,
+                             key=password,
+                             auth_version=auth_version,
+                             retries=retries,
+                             preauthurl=preauthurl,
+                             preauthtoken=preauthtoken,
+                             insecure=insecure,
+                             cacert=cacert,
+                             os_options=os_options,
+                             retry_on_ratelimit=options.retry_on_ratelimit)
+        else:
+            connection = \
+                MyConnection(authurl=authurl,
+                             user=username,
+                             key=password,
+                             auth_version=auth_version,
+                             preauthurl=preauthurl,
+                             preauthtoken=preauthtoken,
+                             insecure=insecure,
+                             cacert=cacert,
+                             os_options=os_options,
+                             retry_on_ratelimit=options.retry_on_ratelimit)
+    except Exception as err:
+        import traceback
+        print "Connect failure: %s" % err
+        logexec('connect() exception: %s %s' % (err, traceback.format_exc()))
+        return(-1)
+
+    # Just created the connection object, so make sure we're really connected
+    # Errors are very rare, but if something misconfigured we want to know!
+    logexec('connected')
+    try:
+        headers = connection.head_account()
+    except Exception as err:
+        import traceback
+        print "%s head_account failure: %s" % (ptime(time.time()), err)
+        logexec('head_account() exception: %s %s' % \
+                    (err, traceback.format_exc()))
+
+        # I'm not happy with the pattern I'm matching but I've seen
+        # at least these 2 types of messages when proxies were set
+        # and head_account failed.
+        failure = "%s" % err
+        if re.search('Not Found|Unable to establish connection', failure):
+            print "    => are proxies or the lack of them the problem? <="
+
+        return(-1)
+
+    if debug & 4:
+        print "Headers: ", headers
+    container_count = int(headers.get('x-account-container-count', 0))
+
+    if debug & 64:
+        print "connected!", connection
+
+    return(connection)
+
+
+def logger(optype=None, data=None, inst=None, test_time=None):
+    """
+    write operation details to a log file, including start/stop times
+    and latencies
+    types:
+        1 - open log
+        2 - latency record
+        3 - tracing record
+        4 - errors
+        9 - close logfile
+
+    mask
+        1 - just latencies
+        2 - just traces
+        4 - exception traces
+    """
+
+    global logfiles
+
+    if not logmask:
+        return
+
+    if optype == 9:
+        logfiles[inst].close()
+        return()
+
+    # should we log?
+    if optype == 2 and (not logmask & 5) or (optype == 3 and not logmask & 2):
+        return()
+
+    if optype == 1:
+        # data is actually the name of the test for type 1 call
+        filename = '/tmp/getput-%s-%d-%d.log' % (data, inst, int(test_time))
+        logfiles[inst] = open(filename, 'w')
+    else:
+        secs = time.time()
+        usecs = '%.3f' % (secs - int(secs))
+        now = "%s.%s" % (time.ctime(secs).split()[3], usecs.split('.')[1])
+        logfiles[inst].write('%s %f %s\n' % (now, secs, data))
+        logfiles[inst].flush()
+
+
+def api_error(type, instance, cname, oname, err, response=None):
+    """
+    Report SWIFT api errors
+    """
+
+    time_now = time.strftime('%H:%M:%S')
+
+    if not s3:
+        status = err.http_status
+        error_string = '%s %s API Error %d' % (time_now, type, status)
+        try:
+	    if response:
+	        error_string += ' TransID: %s' % response['headers']['x-trans-id']
+        except KeyError:
+	    pass
+        error_string += ' %s/%s' % (cname, oname)
+
+    else:
+        status = err.status
+        error_string = '%s %s API Error %d' % (time_now, type, status)
+
+    if not options.quiet:
+        print error_string
+    logger(4, 'ApiError: %s ' % status, instance)
+
+
+def latcalc(latency, min, max, tot, dist):
+    """
+    track total latency times and also incrememnt appropriate histogram bucket
+    """
+
+    tot = tot + latency
+    if latency < min:
+        min = latency
+    if latency > max:
+        max = latency
+
+    # Distribution:  0  1  2  3  4  5 10 20 30 40 50
+    # bucket 5 contains values of 5.xxx whereas higher numbered bucket
+    # contains values not including that value so bucket 6 goes up to 9.999
+    # and 7 up to 19.999
+    bucket = int(latency * ldist10)
+    if bucket >= 5:
+        bucket = int(bucket / 10) + 5
+    if bucket > 10:
+        bucket = 10
+    dist[bucket] = dist[bucket] + 1
+
+    return(min, max, tot)
+
+
+def reset_url(url, new_address=None):
+    """
+    reset url's scheme and port based on --scheme
+    and optional addresss
+    """
+
+    if s3:
+	return('')
+
+    # parse url's scheme, addr, port and path
+    new_url = url
+    pieces = urlparse(new_url)
+    scheme = pieces[0]
+    address = pieces[1]
+    if re.search(':', address):
+        address, port = address.split(':')
+    else:
+        port = ''
+    path = pieces[2]
+
+    # if an address specified, we reset that one
+    if new_address:
+        address = new_address
+
+    # if user specificed --scheme, we use both the scheme and/or port
+    # depending on which are named
+    if options.scheme != '':
+        pieces = options.scheme.split(':')
+        if pieces[0] != '':
+            scheme = pieces[0]
+        if len(pieces) > 1:
+            port = pieces[1]
+
+    new_url = '%s://%s' % (scheme, address)
+    if port != '':
+        new_url += ':%s' % port
+    new_url += path
+
+    if url != new_url and debug & 64:
+        print "Reset: %s  To: %s" % (url, new_url)
+
+    return(new_url)
+
+
+#########################
+#    Object Operations
+#########################
+
+
+def get_offset(procs, instance, csize):
+
+    """
+    when doing random I/O, the object numbering depends on container type
+    and doing it here makes sure consistent for ALL types of operations
+    """
+
+    procs = int(procs)
+    numobjs = int(options.nobjects)
+    if options.ctype == 'shared':
+        offset = numobjs * procs * int(options.rank) + numobjs * instance
+    elif options.ctype == 'bynode':
+        offset = numobjs * instance
+    else:
+        offset = 0
+
+    # remember, these are mutially exclusive
+    objoffset = int(options.objoffset)
+    if objoffset > 0:
+        offset += objoffset
+    elif re.search('a', options.objopts):
+        offset += csize
+
+    return(offset)
+
+
+def put(connection, instance, donetime, cname, csize, oname, random_flag):
+    """
+    perform PUT operations for 1 process until end time OR requested
+    number of operations is reached
+    """
+
+    lat_dist = []
+    for i in range(11):
+        lat_dist.append(0)
+
+    # for stats
+    latencies = []
+
+    # we need the cpu counters for when this operation actually starts
+    scpu = read_stat()
+
+    t0 = time.time()
+
+    min = 9999
+    ops = max = tot = errs = 0
+    puts = 1
+    retries = 0
+    maxputs = last[instance]
+
+    # flat hierarchies are based on rank/proc/instance AND if container
+    # already exists it will be appended to
+    if re.search('f', options.objopts):
+        offset = get_offset(procs, instance, csize)
+    logexec('call logger')
+    logger(3, 'cname: %s  oname: %s  puts: %d  now: %d  done: %d' % \
+               (cname, oname, maxputs, time.time(), donetime), instance)
+
+    if options.headers:
+        fields = options.headers.split(':')
+        debug_tag = fields[0]
+        debug_mask = fields[1]
+        debug_width = int(fields[2]) if len(fields)>2 else 1
+
+    fp = cStringIO.StringIO(fixed_object)
+
+    if s3:
+	bucket = connection.get_bucket(cname)
+        bucket_key = boto.s3.key.Key(bucket)
+
+    while (puts <= maxputs and time.time() < donetime and errs < errmax):
+
+        # build object name based on object type and number
+        if random_flag:
+            object_number = randint(1, csize)
+        elif re.search('f', options.objopts):
+            object_number = offset + puts
+        else:
+            object_number = puts
+        objname = '%s-%d' % (oname, object_number)
+
+        # note that we need the '*' (or any non-numeric char) to prevent the
+        # new object name from clashing with others due to the extra digit
+        if re.search('r', options.objopts):
+            objname = hashlib.sha512(objname + '*' + options.objseed).hexdigest()[0:sha_size]
+             
+        puts = puts + 1
+        t1 = time.time()
+        fp.seek(0)
+        response = {}
+        logexec("Call PUT")
+        headers = {}
+        if options.headers:
+            headers['X-Debug-Mask'] = '%s%0*s:%s' % (debug_tag, debug_width, object_number, debug_mask)
+        if options.extra:
+            headers['X-Trans-Id-Extra'] = options.extra
+
+        t1 = time.time()
+        if not s3:
+            try:
+                connection.put_object(cname, objname, fp, osize,
+                                  response_dict=response,
+                                  headers=headers)
+                logexec("PUT succeeded")
+                transID = response['headers']['x-trans-id']
+                md5check('put', cname, objname, response, md5_digest)
+
+            except ClientException as err:
+                # I expect this to be very rare so if token expired just
+                # get new token, reconnect and retry, treating like any other errors
+                errs = errs + 1
+                if err.http_status == 401:
+                    api_error('token expired, retry put', instance, cname, objname, err)
+                    puts -= 1
+                
+                    connection = connect(authurl, username, password, osvars, \
+                                         preauthurl, preauthtoken)
+                    if connection == -1:
+                        error('Error: ClientException connect error')
+                    preauthtoken = connection.token
+
+                    connection = connect(authurl, username, password, osvars, \
+                                         preauthurl, preauthtoken)
+                else:
+                    api_error('put', instance, cname, objname, err, response)
+                continue
+
+            # this has been a lot of pain, but if we do get a traceback this is the
+            # best way I could think of to both record it locally in the exec.log
+            # and pass it back to gpmulti if called that way.
+            except Exception as err:
+                import traceback
+                logexec('put_object() exception: %s %s' % \
+                        (err, traceback.format_exc()))
+                logger(9, '', instance)
+                return(['%s Unexpected Error - put_object() exception: %s' % \
+                        (ptime(time.time()), err), instance, 0, 0, 0, 0, 0, 0,
+                        lat_dist, latencies, scpu, 0, 0, 0])
+        else:
+            try:
+                bucket_key.key = objname
+                bucket_key.set_contents_from_string(fixed_object)
+                transID = ''
+            except Exception as err:
+                import traceback
+                logexec('s3.set_contents_from_string() exception: %s %s' % \
+                        (err, traceback.format_exc()))
+                logger(9, '', instance)
+                return(['%s Unexpected Error - set_contents_from_string() exception: %s' % \
+                        (ptime(time.time()), err), instance, 0, 0, 0, 0, 0, 0,
+                        lat_dist, latencies, scpu, 0, 0, 0])
+
+        ops = ops + 1
+        t2 = time.time()
+        latency = t2 - t1
+        min, max, tot = latcalc(latency, min, max, tot, lat_dist)
+        latencies.append(latency)
+
+        # we subtract 1 from tries so it keeps retries 0 for s3
+        tries = connection.attempts if not s3 else 1 
+        retries += tries - 1
+        if debug & 32:
+            print "%s %f PUT TransID: %s Latency: %9.6f Tries: %d %s/%s" % \
+                (ptime(t1), t1, transID, latency, tries, cname, objname)
+
+        # note the size if the latecy can vary by object size
+        if logmask & 1 or (logmask & 4 and latency > sizelat[sizenum]):
+            logger(2, "%f  %f  %s  %s/%s" %\
+                       (t1, latency, transID, cname, objname), instance)
+
+        # let it continue so all the cleanup stuff find objects to delete
+        if latency >= latexc_min and latency <= latexc_max and re.search('p', latexc_filt):
+            start = time.strftime('%Y%m%d %H:%M:%S', time.gmtime(t1))
+            text = "%s PUT latency exception: %6.3f secs " \
+                "ObjSize: %4s TransID: %s Tries: %d Obj: %s/%s" % \
+                (start, latency, size, transID, tries, cname, objname)
+            if not options.exclog:
+                print "Host: %s -- Warning: %s" % (hostname, text)
+                if options.warnexit:
+                    break
+            else:
+                exclogger(text)
+
+    tf = time.time()
+    elapsed = tf - t0
+    logger(3, 'Done!  time: %f ops: %d errs: %d' % \
+               (elapsed, ops, errs), instance)
+    logger(9, '', instance)
+
+    return(['put', instance, elapsed, ops, min, max, \
+                tot, errs, lat_dist, latencies, scpu, retries, t0, tf])
+
+
+# gets/dels of flat hierarchies are tricky becuase multiple processes can
+# be hitting them.  when doing random gets/del, which may soon be obsolete
+# now that we have --objopts r, it's ok to calculate a random object number
+# but there was no basis for sequental but now that we've added both --offset
+# and 'r', we can walk sequentially through container based on pre-sha512
+# object names 
+def get(connection, instance, donetime, cname, csize, oname, random_flag):
+    """
+    perform GET operations for 1 process until end time OR requested
+    number of operations is reached
+    """
+
+    lat_dist = []
+    for i in range(11):
+        lat_dist.append(0)
+
+    # for stats
+    latencies = []
+
+    # we need the cpu counters for when this operation actually starts
+    scpu = read_stat()
+
+    t0 = time.time()
+
+    # NOTE - we need to init objsize just in case we don't get any!
+    min = 9999
+    ops = max = tot = errs = objsize = 0
+    gets = 1
+    retries = 0
+    maxgets = last[instance]
+
+    logexec('call logger')
+    logger(3, 'cname: %s  oname: %s  gets: %d  now: %d  done: %d' %
+           (cname, oname, maxgets, time.time(), donetime), instance)
+
+    if s3:
+        bucket = connection.get_bucket(cname)
+        bucket_key = boto.s3.key.Key(bucket)
+        #print "Found Bucket"
+
+    last_size = 0
+    while (gets <= maxgets and time.time() < donetime and errs < errmax):
+
+        objsize = 0
+
+        # build object name based on object type and number
+        # noting for now, sequential access for flat hierachies
+        # is disallowed and only here as a placeholder
+        if random_flag:
+            object_number = randint(1, csize)
+        elif re.search('f', options.objopts, flags=re.I):
+            object_number = offset + gets
+        else:
+            object_number = gets
+        objname = '%s-%d' % (oname, object_number)
+
+        if re.search('r', options.objopts):
+            objname = hashlib.sha512(objname + '*' + options.objseed).hexdigest()[0:sha_size]
+
+        gets = gets + 1
+        t1 = time.time()
+        response = {}
+        body = []
+        headers = {}
+        if options.range != '':
+            headers['Range'] = "bytes=%s" % options.range
+
+        if options.extra:
+            headers['X-Trans-Id-Extra'] = options.extra
+
+        if not s3:
+            try:
+                headers, body = connection.get_object(cname, objname,
+                                                  headers=headers,
+                                                  response_dict=response,
+                                                  resp_chunk_size=65536)
+                transID = response['headers']['x-trans-id']
+
+            except ClientException as err:
+	        if err.http_status == 404 and options.quiton404:
+		    objsize = last_size
+		    gets -= 1
+		    break
+
+                errs = errs + 1
+                if err.http_status == 401:
+                    api_error('token expired, retry get', instance, cname, objname, err)
+                    gets -= 1
+
+                    connection = connect(authurl, username, password, osvars, \
+                                         preauthurl, preauthtoken)
+                    if connection == -1:
+                        error('Error: ClientException connect error')
+                    preauthtoken = connection.token
+
+                    connection = connect(authurl, username, password, os_vars, \
+                                         preauthurl, preauthtoken)
+                else:
+                    api_error('get', instance, cname, objname, err, response)
+                continue
+
+            except Exception as err:
+                import traceback
+                logexec('get_object() exception: %s %s' %\
+                        (err, traceback.format_exc()))
+                logger(9, '', instance)
+                return(['%s Unexpected Error - get_object() exception: %s' % \
+                        (ptime(time.time()), err), instance, 0, 0, 0, 0, 0, 0,
+                        lat_dist, latencies, scpu, 0, 0, 0, 0])
+
+            # continue reading until we have whole object, noting the assumption
+            # if etag checking is fast enough for swift to do all the time, so can I
+            m = md5.new()
+            for chunk in body:
+	        #print "CHUNK:", len(chunk)
+                m.update(chunk)
+                if len(chunk) == 0:
+                    break
+                else:
+                    objsize += len(chunk)
+	    last_size = objsize
+
+        else:
+	    try:
+                transID = ''
+                bucket_key.key = objname
+	        body = bucket_key.get_contents_as_string()
+		objsize = len(body)
+
+            except boto.exception.S3ResponseError as err:
+                if err.status == 404 and options.quiton404:
+                    objsize = last_size
+                    gets -= 1
+                    break
+                else:
+                    errs = errs + 1
+                    api_error('get', instance, cname, objname, err, response)
+
+            except Exception as err:
+                import traceback
+                logexec('s3.get_contents_as_string() exception: %s %s' %\
+                        (err, traceback.format_exc()))
+                logger(9, '', instance)
+                return(['%s Unexpected Error - get_contents_as_string() exception: %s' % \
+                        (ptime(time.time()), err), instance, 0, 0, 0, 0, 0, 0,
+                        lat_dist, latencies, scpu, 0, 0, 0, 0])
+
+        ops = ops + 1
+        t2 = time.time()
+        latency = t2 - t1
+        min, max, tot = latcalc(latency, min, max, tot, lat_dist)
+        latencies.append(latency)
+        if not s3 and options.range == '':
+            md5check('get', cname, objname, response, m.hexdigest())
+
+        # we subtract 1 from tries so it keeps retries 0 for s3
+        tries = connection.attempts if not s3 else 1
+        retries += tries - 1
+        if debug & 32:
+            print "%s %f GET TransID: %s Latency: %9.6f Tries: %d %s/%s Read: %d" % \
+                (ptime(t1), t1, transID, latency, tries, cname, objname, objsize)
+
+        if logmask & 1 or (logmask & 4 and latency > sizelat[sizenum]):
+            logger(2, "%f  %f  %s  %s/%s" % \
+                       (t1, latency, transID, cname, objname), instance)
+
+        if latency >= latexc_min and latency <= latexc_max and re.search('g', latexc_filt):
+            start = time.strftime('%Y%m%d %H:%M:%S', time.gmtime(t1))
+            text = "%s GET latency exception: %6.3f secs " \
+                "ObjSize: %4s TransID: %s Tries: %d Obj: %s/%s" % \
+                (start, latency, size, transID, tries, cname, objname)
+            if not options.exclog:
+                print "Host: %s -- Warning: %s" % (hostname, text)
+                if options.warnexit:
+                    break
+            else:
+                exclogger(text)
+
+
+    tf = time.time()
+    elapsed = tf - t0
+    logger(3, 'Done!  time: %f ops: %d errs: %d' % \
+               (elapsed, ops, errs), instance)
+    logger(9, '', instance)
+
+    return(['get', instance, elapsed, ops, min, max, \
+                tot, errs, lat_dist, latencies, scpu, retries, t0, tf, objsize])
+
+
+def delobj(connection, instance, donetime, cname, csize, oname, random_flag):
+    """
+    perform DEL operations for 1 process until end time OR requested
+    number of operations is reached
+    """
+
+    lat_dist = []
+    for i in range(11):
+        lat_dist.append(0)
+
+    # for stats
+    latencies = []
+
+    # we need the cpu counters for when this operation actually starts
+    scpu = read_stat()
+
+    t0 = time.time()
+
+    min = 9999
+    min = 9999
+    ops = max = tot = errs = 0
+    dels = 1
+    retries = 0
+    maxdels = last[instance]
+
+    logger(3, 'cname: %s  oname: %s  dels: %d  now: %d  done: %d' %
+           (cname, oname, maxdels, time.time(), donetime), instance)
+
+    if s3:
+        bucket = connection.get_bucket(cname)
+        bucket_key = boto.s3.key.Key(bucket)
+        #print "Found Bucket"
+
+    while (dels <= maxdels and time.time() < donetime and errs < errmax):
+
+        # build object name based on object type and number
+        # like GET, sequential deletes of flat containers is disallowed
+        if random_flag:
+            object_number = randint(1, csize)
+        elif re.search('f', options.objopts):
+            object_number = offset + gets
+        else:
+            object_number = dels
+        objname = '%s-%d' % (oname, object_number)
+
+        if re.search('r', options.objopts):
+            objname = hashlib.sha512(objname + '*' + options.objseed).hexdigest()[0:sha_size]
+
+        dels = dels + 1
+        t1 = time.time()
+        response = {}
+
+        if not s3:
+            try:
+                connection.delete_object(cname, objname,
+                                     response_dict=response)
+                transID = response['headers']['x-trans-id']
+
+            except ClientException as err:
+	        if err.http_status == 404 and options.quiton404:
+		    dels -= 1
+		    break
+
+                errs = errs + 1
+                if err.http_status == 401:
+                    api_error('token expired, retry del', instance, cname, objname, err)
+                    dels -= 1
+                
+                    connection = connect(authurl, username, password, osvars, \
+                                         preauthurl, preauthtoken)
+
+                    if connection == -1:
+                        error('Error: ClientException connect error')
+                    preauthtoken = connection.token
+
+                    connection = connect(authurl, username, password, osvars, \
+                                         preauthurl, preauthtoken)
+                else:
+                    api_error('del', instance, cname, objname, err, response)
+                continue
+
+            except Exception as err:
+                import traceback
+                logexec('delete_object() exception: %s %s' % \
+                        (err, traceback.format_exc()))
+                logger(9, '', instance)
+                return(['%s Unexpected Error - delete_object() exception: %s' % \
+                        (ptime(time.time()), err), instance, 0, 0, 0, 0, 0, 0, \
+                        lat_dist, latencies, scpu, 0, 0, 0])
+
+	# as stated in the docs, deleting a non-existing key does NOT throw an error
+	else:
+	    trans_id = ''
+            bucket.delete_key(objname)
+
+        ops = ops + 1
+        t2 = time.time()
+        latency = t2 - t1
+        min, max, tot = latcalc(latency, min, max, tot, lat_dist)
+        latencies.append(latency)
+
+        # we subtract 1 from tries so it keeps retries 0 for s3
+        tries = connection.attempts if not s3 else 1
+        retries += tries - 1
+        if debug & 32:
+            print "%s %f DEL TransID: %s Latency: %9.6f  Tries: %d %s/%s" % \
+                (ptime(t1), t1, transID, latency, tries, cname, objname)
+
+        if logmask & 1 or (logmask & 4 and latency > sizelat[sizenum]):
+            logger(2, "%f  %f  %s  %s/%s" % \
+                       (t1, latency, transID, cname, objname), instance)
+
+    tf = time.time()
+    elapsed = tf - t0
+    logger(3, 'Done!  time: %f ops: %d errs: %d' % \
+               (elapsed, ops, errs), instance)
+    logger(9, '', instance)
+
+    return(['del', instance, elapsed, ops, min, max, \
+                tot, errs, lat_dist, latencies, scpu, retries, t0, tf])
+
+
+def delcont(connection, cname):
+    """
+    delete specified container, noting this is a cleanup function
+    and NOT a test
+    """
+
+    if not s3:
+        try:
+            connection.delete_container(cname)
+        except ClientException as err:
+            if err.http_status == 409:
+                print "container %s is not empty and so couldn't delete" % cname
+            else:
+                print 'error %d deleting container %s' % (err.http_status, cname)
+        except Exception as err:
+            import traceback
+            logexec('delete_container() except: %s %s' % (err, traceback.format_exc()))
+            logger(9, '', instance)
+            print '%s Unexpected Error - delete_container() exception: %s' % (ptime(time.time()), err)
+    else:
+	try:
+	    connection.delete_bucket(cname)
+        except boto.exception.S3ResponseError as err:
+            if err.status == 409:
+                print "bucket %s is not empty and so couldn't delete" % cname
+            else:
+                print 'error %d deleting bucket %s' % (err.http_status, cname)
+
+
+def ptime(secs):
+    """
+    convert time in UTC to a string of the form HH:MM:SS
+    """
+
+    string = time.ctime(secs)
+    strings = string.split()
+    return(strings[3])
+
+
+def read_stat():
+    """
+    read current CPU times from /proc/stat
+    """
+
+    stats = open('/proc/stat', 'r')
+    for line in stats:
+        if re.match('cpu ', line):
+            break
+
+    stats.close()
+    return(line.rstrip())
+
+
+# Called by Pool for initialization of counter
+def pool_init(args):
+    global counter
+    counter = args
+
+
+def execute_proc(args):
+    """
+    execute specified test for 1 process
+    """
+
+    global counter
+    
+    instance = args[0]
+    preauthurl = args[1]
+    preauthtoken = args[2]
+    cname = args[3]
+    csize = args[4]
+    oname = args[5]
+    numobj = args[6]
+    test = args[7]
+    stime = args[8]
+
+    # for PUTs, last will already be correct but we're also passed the correct
+    # numbers anyways. but for other operations last is still pointing to the
+    # reqested PUTs and not the real ones which would be different if
+    # --runtime used
+    last[instance] = numobj
+
+    #    C o n n e c t
+
+    # if connecting directly to a proxy, we need to build
+    # the preauthurl in a round-robin fashion
+    if len(proxies):
+        proxy_index = (instance + int(options.rank)) % \
+            len(proxies)
+        proxy = proxies[proxy_index]
+        preauthurl = reset_url(preauthurl, proxy)
+        if debug & 64:
+            print "Proxy Connect, resetting preauthurl to", preauthurl
+
+    if debug & 64:
+        print "*** Actual Connect %s" % ("using preauthurl/preauthtokens" if not s3 else '')
+    connection = connect(authurl, username, password, osvars, \
+                             preauthurl, preauthtoken)
+
+    # connection complete so increment global counter while locked even
+    # if connect() fails otherwise we'll hang waiting for updated value
+    with counter.get_lock():
+	counter.value += 1
+
+    if connection == -1:
+        logexec('connection error!')
+        return(['Error: ClientException connect error'])
+
+    # wait for counter to be incremented by everyone else to indicate all
+    # threads successfully connected. If we hit hang threshold, give it up
+    # and be sure to pass back 1 extra value since GET includes obj read
+    logexec('connected')
+    limit = time.time() + threshold_hang
+    while 1:
+	if counter.value == procs:
+	    break
+        if time.time() > limit:
+	    print "warning: connection time limit reached at", ptime(time.time())
+            lat_dist = []
+            latencies = []
+	    scpu = read_stat()
+            for i in range(11):
+                lat_dist.append(0)
+            return ([test, instance, 0, 0, 0, 0, 0, 0, \
+                               lat_dist, latencies, scpu, 0, 0, 0, 0])
+        time.sleep(.01)
+
+    # connect times are usually pretty fast, but can be longer
+    ctime = time.time()
+
+    sync_it = ctime - test_start
+    if instance == 0 and (sync_it > threshold_conn):
+        print "warning: rank %s process connections sync took %f seconds" % (options.rank, sync_it)
+
+    if debug & 1 and (instance == 0):
+        print "process connections sync took %f seconds" % (ctime - test_start)
+
+    if debug & 2: 
+        print "process %s connection took %f seconds" % (instance, ctime - test_start)
+
+    #     D e l a y    U n t i l    s y n c t i m e    i f    s p e c i f i e d
+
+    # we only honor --sync for the first of a set of tests
+    # note we only report sync sleeps for instance 0 because we already know
+    # they start pretty close together because of sync above
+    if first_test and options.synctime:
+        sleeptime = int(options.synctime) - time.time()
+	if sleeptime > 0:
+            if debug & 1 and instance == 0:
+	        print "%s sleeping/syncing for %s seconds" % (ptime(time.time()), sleeptime)
+            sleeptime = int(options.synctime) - time.time()
+            time.sleep(sleeptime)
+        else:
+            if not options.quiet and instance == 0:
+                print "warning: Sync time passed by %f seconds for %s rank: %s at " % (abs(sleeptime), instance, options.rank, ptime(time.time()))
+
+            # if we need to exit on this warning we need to make sure
+            # output populated or bad things will happen later
+            if options.warnexit:
+                lat_dist = []
+                for i in range(11):
+                    lat_dist.append(0)
+                return([test, instance, 0, 0, 0, 0, 0, 0, 0, \
+                               lat_dist, read_stat(), 0, 0, 0, 0, 0])
+
+    # trickier than it seems. if too much of a delay in connections or syntime, we HAVE to base tests on
+    # current time or it may end before it starts
+    if options.runtime:
+        donetime = time.time() + int(options.runtime)
+    else:
+        donetime = 9999999999
+
+    # turns out that some tests can take longer than the PUT, and since we
+    # want to access all the objects, give other tests plenty of time
+    if re.search('p', options.tests) and test != 'p':
+        donetime *= 5
+
+    #    R u n    1    T e s t
+
+    if debug & 1 and instance == 0:
+        print "%s starting tests" % ptime(time.time())
+
+    if debug & 2:
+        print "Start Test for %s - cname: %s  csize: %d  oname: %s range: %s" % \
+            (test, cname, csize, oname, options.range)
+
+    random_flag = False
+    if re.match('[PGD]', test):
+        random_flag = True
+
+    if test == 'p' or test == 'P':
+        logexec('begin PUT %d' % instance)
+        output = put(connection, instance, donetime, cname, \
+                         csize, oname, random_flag)
+        logexec('PUT %d completed' % instance)
+    elif test == 'g' or test == 'G':
+        logexec('begin GET %d' % instance)
+        output = get(connection, instance, donetime, cname, \
+                         csize, oname, random_flag)
+        logexec('GET %d completed' % instance)
+    elif test == 'd' or test == 'D':
+        logexec('begin DEL %d' % instance)
+        output = delobj(connection, instance, donetime, cname, \
+                         csize, oname, random_flag)
+        logexec('DEL %d completed' % instance)
+    else:
+        error("Invalid test: %s" % test)
+
+    if debug & 1 and instance == 0:
+        print "%s Tests done" % ptime(time.time())
+
+    if debug & 2:
+        print "Test done for instance", instance
+
+    connection.close()
+
+    return(output)
+
+
+def print_line(procs, instance, ops, rate, iops, min, max, tot, errs,
+               cpu_percent, lat_dist, median, etime, retries, xfer, mixed_oper, t0, tf, psum_flag=False):
+    """
+    print a line of results for one process OR total for all, only printing
+    process details when --psum set and print_output tells us to do so
+    """
+
+    # relatively rare, but if no ops, no latencies...
+    if ops:
+        latency = "%7.3f" % float(tot / ops)
+    else:
+        latency = '000.00'
+        min = max = 0
+        for i in range(11):
+            lat_dist.append(0)
+
+    # f a mixed test the name may have been modified and we want to look at the
+    # raw one from here on out
+    test = test_raw
+
+    if test == 'p':
+        tname = 'put'
+    elif test == 'P':
+        tname = 'putR'
+    elif test == 'g':
+        tname = 'get'
+    elif test == 'G':
+        tname = 'getR'
+    elif test == 'd':
+        tname = 'del'
+    elif test == 'D':
+        tname = 'delR'
+
+    # There are actually 3 types of output based on switches, and each has to have
+    # difference values for procs and test name:
+    #   --psum:      proc is the result for specific thread and test is put or get
+    #   --mixopt m:  proc is the number of threads running a put or get and test is the p or g and number
+    #   all cases:   proc is the total number of proces, test name is as specified
+    # current test name is in global 'test_raw' and first letter sometimes in 'test'
+    proc_tot = procs
+    match = re.search('p(\d+)g(\d+)', test_raw)
+    if match: 
+        mixed_p = int(match.group(1))
+        mixed_g = int(match.group(2))
+	if mixed_oper == 'p':
+	    if not psum_flag:
+	    	tname = 'p%s' % mixed_p
+                proc_tot = (procs/(mixed_p + mixed_g)) * mixed_p
+	    else:
+		tname = 'put'
+	elif mixed_oper == 'g':
+	    if not psum_flag:
+	        tname = 'g%s' % mixed_g
+                proc_tot = (procs/(mixed_p + mixed_g)) * mixed_g
+	    else:
+		tname = 'get'
+ 	else:
+	    tname = test
+	    if psum_flag and options.mixopts == 'm' and proc_tot != procs:
+		return
+
+    line = ''
+    if options.rank:
+        line += "%-4s " % options.rank
+    line += "%-5s %4d %4s %6s  %8s  %8s %8.2f %5d" % \
+        (tname, 1, proc_tot, cvt2KMG(xfer), ptime(t0), ptime(tf), \
+             rate, ops)
+    line += "%10.2f %4d %s %7.3f %5.2f-%05.2f" % \
+        (iops, errs, latency, median, min, max)
+    if options.ldist:
+        for i in range(11):
+            line += " %5d" % lat_dist[i]
+
+    line += "  %5.2f" % cpu_percent
+    if options.utc:
+        line += ' %d' % ttime
+    line += ' %3d' % retries
+    print line
+
+
+def median_calc(list):
+    """
+    Calculate the median of a list
+    """
+
+    list.sort()
+    median = list[len(list)/2] if len(list) else 0
+    return(median)
+
+
+def print_header():
+
+    global header_printed
+
+    header = ''
+    if not options.nohead and not header_printed:
+        if options.rank:
+            header += "%4s " % 'Rank'
+
+        header += "%4s  %4s %4s %6s  %-8s  %-8s %8s %5s" % \
+            ('Test', 'Clts', 'Proc', 'OSize', 'Start', 'End', 'MB/Sec', 'Ops')
+        header += "%10s %4s %7s %7s  %10s" % \
+            ('Ops/Sec',  'Errs', 'Latency', 'Median', 'LatRange')
+
+        if options.ldist:
+            for i in (0, 1, 2, 3, 4, 5, 10, 20, 30, 40, 50):
+                f10 = "%.*f" % (int(options.ldist), float(i) / ldist10)
+                header += " %5s" % f10
+        header += '   %CPU'
+        if options.utc:
+            header += ' %-10s' % 'Timestamp'
+        header += ' Ret'
+        print header
+        header_printed = 1
+
+
+# Normally, this gets called once for each 'standard' test of put, get or delete
+# However, for mixed tests it gets called 3 times! Once for each test type (if mixopts is m)
+# and again for the final combined totals. If --psum is also specified we either print
+# details for the 'm' tests or the final totals but not both. The key to all this is
+# the optional argument, mixed_oper which will speficy the particular test being run
+def print_output(results, procs, mixed_oper=''):
+    """
+    print header AND generate results for 1 process or summarize all,
+    calling print_line() for each
+    """
+    print_header()
+
+    #    C a l c u l a t e    C P U    U t i l
+
+    # first, find the oldest CPU counters based on which process started
+    # first by seeing who has the lowest user time
+    oldest = 9999999999
+    for i in range(procs):
+        scpu = results[i][10]
+        user = int(scpu.split()[1])
+        if user < oldest:
+            cpu_start = scpu
+            oldest = user
+
+    # now get current CPU counters
+    cpu_end = read_stat()
+    cpus = cpu_start.split()
+    cpue = cpu_end.split()
+
+    # note that the total includes idle and iowait time
+    cpu_real = cpu_total = 0
+    for i in range(1, 8):
+        diff = int(cpue[i]) - int(cpus[i])
+        cpu_total = cpu_total + diff
+        if i != 4 and i != 5:
+            cpu_real = cpu_real + diff
+    try:
+        # I've seen failures when sync time passed and CPU elapsed = 0
+        cpu_percent = 100.0 * cpu_real / cpu_total
+    except ZeroDivisionError:
+        cpu_percent
+    #print "CPU - Real: %d  Tot: %d" % (cpu_real, cpu_total)
+
+    #    D e a l    W i t h    E a c h    P r o c e s s
+
+    ldist_tot = []
+    for i in range(11):
+        ldist_tot.append(0)
+
+    bytes_read = 0
+    errors = 0
+    lattot = 0
+    latmin = 999
+    latmax = 0
+    lat_all = []
+    t0min = time.time()
+    tfmax = 0
+    etime = time.time()
+    opst = ratet = iopst = retries = 0
+    for i in range(procs):
+
+	# alas, tests are single chars but we store 'put', 'get', etc n the
+	# results so only save 1st char from array AND when doing mixed operation
+	# only look at results that apply to that specified, unless we're doing 'tot'
+	test = results[i][0][0]
+	first_oper_char = test[0]
+	if mixed_test and mixed_oper != 'tot' and first_oper_char != mixed_oper:
+	    continue 
+
+	# get operation return the object size read as an additional result because
+	# get-by-range can read less.
+	if first_oper_char == 'g':
+	    bytes_xfer = results[i][-1]
+	else:
+	    bytes_xfer = osize
+
+        oper, instance, elapsed, ops, min, max, tot, errs, \
+            lat_dist, latencies, scpu, retries, t0, tf = results[i][0:14]
+
+        t0min = t0 if t0 < t0min else t0min
+        tfmax = tf if tf > tfmax else tfmax
+
+        # combine all latencies into one big array
+        lat_all += latencies
+
+	# either use the object size OR bytes_read for calculation
+        bytes = ops * bytes_xfer
+        try:
+            rate = bytes / elapsed / 1024 / 1024
+            iops = ops / elapsed
+        except ZeroDivisionError:
+            rate = iops = 0
+
+	# Handling of --psum tricky for mixed tests. if doing mixed output, we only 
+        # print for mixed output and if not doing print output we only print for totals
+        psum_print = 0
+	if mixed_test and options.psum \
+	    and ((options.mixopts == 'm' and mixed_oper != 'tot') or \
+		 (options.mixopts != 'm' and mixed_oper == 'tot')):
+	    psum_print = 1
+
+        if (options.psum and not mixed_test) or psum_print:
+            print_line(instance, instance, ops, rate, iops, min, max,
+                       tot, errs, cpu_percent, lat_dist,
+                       median_calc(latencies), etime, retries,
+		       bytes_xfer, mixed_oper, t0, tf, True)
+
+        opst += ops
+        ratet += rate
+        iopst += iops
+        errors += errs
+        lattot += tot
+
+        # even if we don't need it
+        for i in range(11):
+            ldist_tot[i] += lat_dist[i]
+
+        if min < latmin:
+            latmin = min
+        if max > latmax:
+            latmax = max
+        i = i + 1
+
+    # Final tally, always 1 greater than last one but if no iops,
+    # no median value
+    if iopst:
+        median = median_calc(lat_all)
+    else:
+        median = 0
+
+    print_line(procs, instance + 1, opst, ratet, iopst, latmin, latmax,
+               lattot, errors, cpu_percent, ldist_tot, median, etime,
+	       retries, bytes_xfer, mixed_oper, t0min, tfmax)
+
+
+def control_c_handler(signal, frame):
+
+    # on ^C, just use a big stuck and whack the parent and that will
+    # bring down all the children.
+    os.kill(ppid, 9)
+    sys.exit(0)
+
+#####################################
+#    S T A R T    O F    S C R I P T
+#####################################
+
+global header_printed
+header_printed = 0
+
+if __name__ == "__main__":
+
+    version = '0.3.2'
+    copyright = 'Copyright 2016 Hewlett-Packard Development Company, L.P.'
+
+    # Needs to be defined before anything else for error logging
+    hostname = socket.gethostname()
+
+    # need to differentiate initial call to main from those that are called
+    # when parsing args during multiprocessing
+    main(sys.argv[1:])
+    if options.printheader:
+        print_header()
+        sys.exit()
+
+    policy = options.policy
+
+    # we need to know which version of disable.warnings to call
+    urlloc = 0
+    try:
+        import urllib3
+        urlloc += 1
+    except:
+        pass
+    try:
+        from requests.packages import urllib3
+        urlloc += 2
+    except:
+        pass
+
+    # older versions of urlib3, which may be part of requests
+    # will givesub-optimal small obj performance
+    urlver = urllib3.__version__
+    fields = urlver.split('.')
+    if fields[0] == 'dev' or int(fields[0]) == 1 and int(fields[1]) < 8:
+        print "WARNING: your are running version '%s' of urllib3" % urlver
+        print "         which may cause small objects operations to run slower"
+        print "         it is recommended you run pip install --upgrade urllib3"
+
+    # disable requests library warning when using --insecure
+    if options.insecure == True:
+        try:
+            if urlloc & 1:
+                urllib3.disable_warnings()
+            elif urlloc & 2:
+                requests.packages.urllib3.disable_warnings()
+        except AttributeError:
+            pass
+
+    # make sure log ALWAYS exists before starting
+    if options.exclog and (excopt == 'c' or not os.path.exists(exclog)):
+        exc = open(exclog, 'w')
+        exc.close()
+
+    # flat hierarchies as special
+    if re.search('f', options.objopts):
+        if not options.nobjects:
+            text = "-n required for flat hierarchies."
+            text += "  -r ok too but there will be holes!"
+            error(text)
+
+    if re.search('a', options.objopts):
+        if re.search('P', options.tests):
+            error("append mode makes no sense for random PUTs")
+        elif not re.search('f', options.objopts):
+            error("append mode only supported for flat hierarchies. " + \
+                      "consider different onames OR --objopts u")
+
+    sleep_test = sleep_testset = sleep_proc = 0
+    if options.sleeps:
+        options.sleeps += '::'    # makes sure aways at least 3
+        fields = options.sleeps.split(':')
+        try:
+            if fields[0] != '':
+                sleep_test = int(fields[0])
+            if fields[1] != '':
+                sleep_testset = int(fields[1])
+            if fields[2] != '':
+                sleep_proc = int(fields[2])
+        except ValueError:
+            error('non-numeric value in --sleeps')
+
+    #     C r e a t e    L o c a l    C o n n e c t i o n
+
+    # multiprocessing/ssl doesn't like to use the same connections in the
+    # parent and child processes, so create one here for us to use.
+    # also use this opportunity to get a single auth token/url pair for
+    # everyone to share
+    proxies = []
+    preauthurl = ''
+    if debug & 64:
+        if not s3:
+            # a lot of extra work but I want to know when proxies are involved
+            header_printed = False
+            for env in os.environ:
+                if re.search('proxy', env):
+                   if not header_printed:
+                        print "*** Proxy environment variables ***"
+                        header_printed = True
+                   print "%s=%s" % (env, os.environ.get(env))
+        print "*** Initial Connect %s" % ("- get preauthtoken/preauthurl" if not s3 else '')
+
+    connection = connect(authurl, username, password, osvars)
+    if connection == -1:
+        error('Error: ClientException connect error')
+
+    if not s3:
+        preauthtoken = connection.token
+        preauthurl = connection.url
+        if debug & 64:
+            print "  Got - Auth: %s  Url: %s" % (preauthtoken, preauthurl)
+
+    else:
+        preauthtoken = preauthurl = ''
+
+
+    preauthurl = reset_url(preauthurl)
+
+    # only if explicitly overriding
+    if options.preauthtoken:
+        preauthtoken = options.preauthtoken
+
+    # when talking directly to proxies, build a list of the
+    # addresses to talk to for later use
+    if options.proxies != '':
+
+        # find the address we're currently pointing to add to the
+        # no_proxy env we're building just in case proxies are set
+        match = re.search('//(.*):', authurl)
+        authaddr = match.group(1)
+        no_proxy = '127.0.0.1,localhost,%s' % authaddr
+        for addr in options.proxies.split(','):
+            proxies.append(addr)
+            no_proxy += ',%s' % addr
+        os.environ['no_proxy'] = no_proxy
+        if debug & 1:
+            print "Defining no_proxy:",  os.environ['no_proxy']
+
+    if options.repeats:
+        repeats = int(options.repeats)
+    else:
+        repeats = 1
+
+    try:
+        fields = options.logops.split(':')
+        logmask = int(fields[0])
+    except:
+        error('--logops must be an integer')
+
+    if logmask & 4:
+        sizelat = []
+        sizes = len(sizeset)
+        opslat = len(fields) - 1
+        if opslat > 1 and opslat != sizes:
+            error("you have specified more then one latency with opslogs " + \
+                      "but their count doesn't match number of sizes")
+        for i in range(sizes):
+            try:
+                if opslat == ':1':
+                    sizelat.append(float(fields[1]))
+                else:
+                    sizelat.append(float(fields[i + 1]))
+            except:
+                error("--logops 4 must include ':val' for latency exceptions")
+
+    logexec('Beginning execution for procset: %s' % options.procset)
+
+    if options.echo:
+        print '#',
+        for i in range(len(sys.argv)):
+            print '%s '% sys.argv[i],
+        print
+
+    # save our pid which is parent to the subprocesses and set a ^C handler
+    ppid = os.getpid()
+    signal.signal(signal.SIGINT, control_c_handler)
+
+    last_size = 0
+    first_test = 1
+    header_printed = 0
+    for rep in range(repeats):
+
+        for procnum in range(len(procset)):
+            procs = procset[procnum]
+
+            logexec('Running tests for %d procs' % procs)
+
+            # this resets last[] for the upcoming set of tests and start a
+            # a new section of output with a new header unless --repeat
+            reset_last(procs)
+
+	    puts_per_proc = []
+            mixed_ppp = []
+	    for i in range(procs):
+		puts_per_proc.append(0)
+		mixed_ppp.append(0)
+
+            if repeats == 1:
+                header_printed = 0
+
+            for sizenum in range(len(sizeset)):
+                size = sizeset[sizenum]
+                osize = cvtFromKMG(size)
+
+                # see if we need to build a new test object
+                if osize != last_size:
+                    fixed_object = build_object()
+                    last_size = osize
+
+		# may may reset the test name if mixed so save its
+		# raw name too in case we need it later
+                tests = options.tests.split(',')
+                for testnum in range(len(tests)):
+                    test = test_raw = tests[testnum]
+                    match = re.search('p(\d+)g(\d+)', test)
+		    if match:
+                        mixed_test = True
+                        mixed_p = int(match.group(1))
+                        mixed_g = int(match.group(2))
+ 		    else:
+			mixed_test = False
+
+		    # save current time this test processing starts so we can
+		    # report offset later, really just for debugging
+		    test_start= time.time()
+
+                    # what time should execution actually start?
+                    if options.synctime:
+                        stime = int(options.synctime)
+                    else:
+                        stime = time.time()
+
+                    # and the timestamp is tricky.  For PUT test, it's the test
+                    # time.  For all others if the container ends in what looks
+                    # like a utc time, use that.
+                    log_time = stime
+                    if test != 'p' and re.search('-\d{10}$', options.cname):
+                        log_time = options.cname.split('-')[-1]
+
+                    # we want the logs to match the test time for easy ident
+                    # and also need to preallocate the list of log file handles
+                    if logmask:
+                        logfiles = []
+                        for i in range(1, procs + 1):
+                            logfiles.append(0)
+                            logger(1, test, i - 1, log_time)
+
+                    # Initialize the global process synchronization counter
+                    counter = Value('i', 0)
+
+                    jobs = []
+                    pool = Pool(procs, initializer=pool_init, initargs=(counter,))
+                    inputs = []
+                    csize = last_size = 0
+                    create_container = 0
+                    created = {}
+                    cpolicy = ''
+                    for inst in range(procs):
+
+                        if mixed_test:
+                            i = inst % (mixed_p + mixed_g)
+                            if i < mixed_p:
+                                test = 'p'
+                            else:
+				test = 'g'
+
+			# NOTE - we ALWAYS point non-put tests as well as mixed tests that
+			# hadn't been preceded by a standard PUT to counts for the
+			# last full put test, which will may have been pre-populated via
+			# --putsperproc
+                        if test == 'p' or \
+				(mixed_test and not put_test_first) or \
+				(not mixed_test and not re.search('p', options.tests)):
+                            numobj = last[inst]
+
+			    # further and ONLY if a pure PUT test, we reset the test time
+			    # which may ultimately be used forp setting the container name
+			    if test_raw == 'p':
+                            	ttime = stime    # all tests get same ttime w/ UTC
+                        else:
+                            numobj = puts_per_proc[inst]
+				
+                        if debug & 16:
+                            print "Exec - I: %d Obj: %d Test: %s Time: %f" % \
+                                (inst, numobj, test, stime)
+
+                        cname = options.cname
+                        if options.utc:
+                            cname += '-%d' % ttime
+                        if options.ctype == 'bynode':
+                            cname += "-%s" % options.rank
+                        elif options.ctype == 'byproc':
+                            cname += "-%s-%d" % (options.rank, inst)
+
+                        # if container exists, get its storage policy name
+                        # noting since they all MUST be the same we need only
+                        # look at first instance
+                        if inst == 0:
+			    if not s3:
+                                try:
+                                    response = {}
+                                    headers = connection.head_container(cname)
+                                    try:
+                                        cpolicy = headers['x-storage-policy']
+                                    except KeyError:    # must be pre-juno swift
+                                        if policy != '':
+                                            text = "this version of swift doesn't "
+                                            text += "support storage policies"
+                                            error(text)
+
+                                except ClientException as err:
+                                    if err.http_status != 404:
+                                        error("Error %s trying to access '%s'" %
+                                              (err.http_status, cname))
+
+                                # if a storage policy specified and the container
+                                # exists, they MUST match
+                                if policy != '' and cpolicy != '' and \
+                                        cpolicy.lower() != policy.lower():
+                                    error('container storage policy for %s already set to %s'
+                                          % (cname, cpolicy))
+                            else:
+				try:
+				    connection.get_bucket(cname)
+				    cpolicy = 's3'    # just as long as its not blank
+                                except boto.exception.S3ResponseError as err:
+				    if err.status == 403:
+					error('get_bucket failure: forbidden 403, created by different api?')
+				    elif err.status != 404:
+					error("Unexpected response: %s" % err)
+
+                        # make sure container for get/delete tests exist
+                        # before proceeding, which means we found cpolicy
+                        # above.  appending on PUT will be dealt with later.
+                        if re.search('[gGdD]', test) and cpolicy == '':
+                            error("container '%s' doesn't exist" % cname)
+
+                        # if not doing random or flat object I/O, object
+                        # names all start with base-rank-inst
+                        oname = options.oname
+			obj_inst = inst
+			if test == 'g' and obj_max_proc != 0:
+			    obj_inst %= obj_max_proc
+                        if re.search('u', options.objopts):
+                            oname += '-%d' % ttime
+                        if not re.match('[PGD]', test) and \
+                                not re.search('f', options.objopts):
+                            oname += "-%s-%d" % (options.rank, obj_inst)
+
+                        if debug & 8:
+                            print 'debug: cname %s  oname: %s' % (cname, oname)
+
+                        # for flat hierarchies or when in append mode (which
+                        # assumes flat hierarchies), we need to know if
+                        # container exists and if so, how many objects.
+                        # since all procs for shared|bynode write to container
+                        # of same name we only check size once.  also note
+                        # each client does this check so if something does go
+                        # wrong you can get multiple errors
+                        if re.search('[af]', options.objopts):
+                            if inst == 0 or options.ctype == 'byproc':
+                                try:
+                                    headers = \
+                                        connection.head_container(cname)
+                                    csize = int(headers['x-container-object-count'])
+                                except ClientException as err:
+                                    if err.http_status == 404 and \
+                                            not cname in created:
+                                        warn = "warning: creating '%s'" % cname
+                                        warn += " in append mode"
+                                        print warn
+                                        created[cname] = ''
+                                    else:
+                                        etype = "head_container error: "
+                                        error("%s %s on '%s" % \
+                                                  (etype, err, cname))
+
+                        # make sure container(s) exits BEFORE tests start,
+                        # noting append mode sets csize IF continer exists
+                        # AND if a storage policy, set it
+                        if test == 'p' and csize == 0:
+                            if inst == 0 or options.ctype == 'byproc':
+                                # in case a lot of containers, stagger
+                                # creation to be safe, but not too much
+                                time.sleep(.01)
+                                logexec('Create container %d' % inst)
+                                create_container = 1
+                                headers = {}
+                                if policy != '':
+                                    headers ['X-Storage-Policy'] = policy
+			        if s3:
+				    try:
+				        connection.create_bucket(cname)
+				    except boto.exception.S3ResponseError as err:
+					print "create_bucket failed:", err
+                                    except Exception as err:
+                                        import traceback
+					print ">>>>>>>>>>>><<<<<<<<<<<<<"
+                                        logexec('put_container except: %s %s' % \
+                                                    (err, traceback.format_exc()))
+                                        error('create_bucket error: %s' % err)
+
+
+				else:
+				    try:
+                                        connection.put_container(cname, headers=headers)
+                                        logexec('container %d created' % inst)
+                                    except Exception as err:
+				        print "put_container failed:", err
+                                        if err.http_status == 409:
+                                            error("Error: 409 Container: %s.  Could be policy mismatch" % cname)
+
+                                        match = re.search('Bad Request\s+(.*)', '%s' % err)
+                                        if match:
+                                            error('Bad Request: %s' % match.group(1))
+
+                                        # unexpected error handling...
+                                        import traceback
+                                        logexec('put_container except: %s %s' % \
+                                                    (err, traceback.format_exc()))
+                                        error('Error: put_container exc: %s' % err)
+
+			inputs.append([inst, preauthurl, preauthtoken, cname, \
+                                           csize, oname, numobj, test, stime])
+
+                    poolOutputs = pool.map(execute_proc, inputs)
+                    pool.close()
+                    pool.join()
+                    first_test = 0
+
+                    results = []
+                    total_errors = 0
+                    unexpected_error = 0
+                    for i in range(procs):
+                        logexec('I: %s' % i)
+                        oneproc = poolOutputs[i]
+                        if re.search('error', oneproc[0], re.IGNORECASE):
+                            print "%s, try -d128 for more clues " % oneproc[0],
+                            print "in /tmp on remote node"
+                            unexpected_error = 1
+                            break
+
+                        results.append(oneproc)
+                        logexec('I: %s got output %s' % (i, oneproc[0]))
+                        total_errors += oneproc[7]
+                        logexec('Count Errors: %d' % total_errors)
+
+                        # for full PUT test save number of objs actually written in
+                        # case we terminated due to a timer rather than count
+			# for mixed tests we save to our alternate array though at
+			# this time we're not doing anything with it.
+                        if oneproc[0] == 'put':
+                            instance = oneproc[1]
+                            nobjects = oneproc[3]
+			    if not mixed_test:
+                        	puts_per_proc[instance] = nobjects
+			    else:
+				# track how many mixed PUTs we just did BUT if we're going to delete it'll use
+				# puts_per_proc[] and it we actually wrote more, we need to updates its count
+				# so we'll delete them all
+                                mixed_ppp[instance] = nobjects
+				puts_per_proc[instance] = nobjects if nobjects > last[instance] else last[instance]
+
+                    if unexpected_error:
+                        continue
+		    
+		    if not mixed_test:
+                    	print_output(results, procs)
+		    else:
+			p_tot = (procs/(mixed_p + mixed_g)) * mixed_p
+                        g_tot = (procs/(mixed_p + mixed_g)) * mixed_g
+			if options.mixopts == 'm':
+                            print_output(results, procs, 'p')
+                            print_output(results, procs, 'g')
+                        print_output(results, procs, 'tot')
+                    logexec('printing complete')
+
+		    if test[0] == 'p':
+		        for i in range(procs):
+			    last[i] = puts_per_proc[i]
+
+                    # note there WILL be holes in the ppp for mixed put tests
+		    if options.putsperproc:
+			ppp = ''
+                        if test_raw == 'p':
+                            for puts in puts_per_proc:
+                                ppp += '%d:' % puts
+                            print "PutsPerProc: %s" % ppp[:-1]
+			elif re.match('p\d', test_raw):
+                            for puts in mixed_ppp:
+                                ppp += '%d:' % puts
+                            print "PutsPerProc: %s" % ppp[:-1]
+
+                    # unless --cont-nodelete, delete container(s) after
+                    # delete test run
+                    if test == 'd' and not options.cont_nodelete:
+                        cname = options.cname
+                        if options.utc:
+                            cname += '-%d' % ttime
+                        if options.ctype == 'bynode':
+                            cname += "-%s" % options.rank
+                        if debug & 1:
+                            print 'deleting container(s): %s' % cname
+
+                        if options.ctype != 'byproc':
+                            delcont(connection, cname)
+                        else:
+                            for proc in range(procs):
+                                name = '%s-%s-%d' % (cname, options.rank, proc)
+                                delcont(connection, name)
+
+                    # not sure if I should do this last, but I think I'd like
+                    # to let all processes finish as well as all prints to
+                    # complete before aborting, which is what warnproc means
+                    if total_errors > 0 and options.warnexit:
+                        sys.exit()
+
+                    # on the very last test, skip sleep, noting if no sleeps
+                    # the sleep times are all zeros
+                    if testnum == len(tests) - 1 and \
+                            sizenum == len(sizeset) - 1 and \
+                            procnum == len(procset) - 1:
+                        continue
+
+                    if sleep_test:
+                        if debug & 256:
+                            print "End-of-test, sleeping", sleep_test
+                        time.sleep(sleep_test)
+
+                # on the last testset, skip sleep
+                if sizenum == len(sizeset) - 1 and procnum == len(procset) - 1:
+                    continue
+
+                if sleep_testset:
+                    if debug & 256:
+                        print "End-of-testset, sleeping:", sleep_testset
+                    time.sleep(sleep_testset)
+
+            # on the last proc, skip sleep
+            if procnum == len(procset) - 1:
+                continue
+
+            if sleep_proc:
+                if debug & 256:
+                    print "End-of-proc, sleeping:", sleep_proc
+                    time.sleep(sleep_proc)
+
+    logexec('processing complete')
