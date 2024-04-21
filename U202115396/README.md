@@ -16,5 +16,5 @@ cuckoo-driven way
 | 处理器             | AMD Ryzen 5 4600U with Radeon Graphics            2.10 GHz |
 | 内存               | 16G                                                        |
 | 服务器端           | mock_s3 && MinIO Server                                    |
-| B**en**c**hma**rk3 | 遍制实验程序研究                                           |
+| B**en**c**hma**rk3 | 编制实验程序研究                                           |
 | 客户端             | Boto3                                                      |
