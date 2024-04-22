@@ -1,0 +1,8 @@
+build
+cmake-*
+output
+.cache
+.idea
+log
+bin
+log_*
