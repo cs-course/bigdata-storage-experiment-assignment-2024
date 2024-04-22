@@ -328,8 +328,8 @@ def test():
     found = 0
 
     # create a hash table with an initially small number of bukets
-    c = HashTabWithoutStrategy(100)
-    # c = HashTab(100)
+    # c = HashTabWithoutStrategy(100)
+    c = HashTab(100)
 
     # Now insert size key/data pairs, where the key is a string consisting
     # of the concatenation of "foobarbaz" and i, and the data is i
