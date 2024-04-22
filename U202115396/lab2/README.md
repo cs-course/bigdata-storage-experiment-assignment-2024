@@ -9,13 +9,38 @@
 | ---------- | ------------------------------------------------------------ |
 | 处理器   | AMD Ryzen 5 4600U with Radeon Graphics            2.10 GHz |
 | 内存     | 16G                                                        |
-| 服务器端 | MinIO Server                                               |
+| 服务器端 | MinIO Server  &&  mock_s3 Server                         |
 | 系统类型 | 64 位操作系统, 基于 x64 的处理器                           |
 | 客户端   | Boto3                                                      |
 
 # 实验记录
 
 ## 实验lab2
+
+### mock_s3 Server
+
+1. Create
+   创建一个新桶`my-new-bucker`，然后运行`test.py`程序，列出所有的存储桶，结果如下：
+
+   ![1713365619184.png](./figure/1713365619184.png)
+2. Update && Read
+
+   向存储桶`my-new-bucket`添加一个`huoying.jpg`对象(注意:添加的时候，path和object_key不能包含中文)，然后运行`Read.py`程序，读出`my-new-bucket`的所有存储对象，结果如下：
+
+   ![1713365780959.png](./figure/1713365780959.png)
+3. Delete
+   运行`Delete.py`，首先删除存储桶中对象`huoying.jpg`，然后删除存储桶`my-new-bucket`。
+
+   ![1713365941329.png](./figure/1713365941329.png)
+
+   此时再运行`test.py`读取所有桶，信息如下：
+
+   ![1713368441261.png](./figure/1713368441261.png)
+4. 整个流程下来，mock_s3 Server命令行界面如下：
+
+   ![1713368653596.png](./figure/1713368653596.png)
+
+### Minio Server
 
 1. 根据实验文档提供的Boto3源代码安装
    ```

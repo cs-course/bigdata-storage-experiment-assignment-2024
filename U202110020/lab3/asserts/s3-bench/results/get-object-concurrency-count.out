@@ -1,0 +1,73 @@
+==== Test read concurrency count: 5 =====
+total read object size 4096 KB
+read object size 64 KB
+concurrenct count 5
+total read duration 16.083548208 s
+total read throughput 254.67017271491366 KB/s
+read avg latency 0.21718025 s
+==== Test read concurrency count: 10 =====
+total read object size 4096 KB
+read object size 64 KB
+concurrenct count 10
+total read duration 26.31105175 s
+total read throughput 155.6760268999889 KB/s
+read avg latency 0.368436245 s
+==== Test read concurrency count: 15 =====
+Task 13 failed: streaming error
+total read object size 4096 KB
+read object size 64 KB
+concurrenct count 15
+total read duration 38.466782291 s
+total read throughput 106.48148236090788 KB/s
+read avg latency 1.33043647 s
+==== Test read concurrency count: 20 =====
+Task 43 failed: streaming error
+total read object size 4096 KB
+read object size 64 KB
+concurrenct count 20
+total read duration 53.921707333 s
+total read throughput 75.9619864167998 KB/s
+read avg latency 2.42050488 s
+==== Test read concurrency count: 25 =====
+total read object size 4096 KB
+read object size 64 KB
+concurrenct count 25
+total read duration 62.850709916 s
+total read throughput 65.17030603909336 KB/s
+read avg latency 2.075210032 s
+==== Test read concurrency count: 30 =====
+Task 58 failed: streaming error
+total read object size 4096 KB
+read object size 64 KB
+concurrenct count 30
+total read duration 72.653622166 s
+total read throughput 56.377092812267534 KB/s
+read avg latency 2.64142078 s
+==== Test read concurrency count: 35 =====
+total read object size 4096 KB
+read object size 64 KB
+concurrenct count 35
+total read duration 83.118063 s
+total read throughput 49.279300457230335 KB/s
+read avg latency 3.359264624 s
+==== Test read concurrency count: 40 =====
+total read object size 4096 KB
+read object size 64 KB
+concurrenct count 40
+total read duration 94.257777541 s
+total read throughput 43.45529999599591 KB/s
+read avg latency 4.576512709 s
+==== Test read concurrency count: 45 =====
+total read object size 4096 KB
+read object size 64 KB
+concurrenct count 45
+total read duration 106.293277875 s
+total read throughput 38.534892157685285 KB/s
+read avg latency 4.933737894 s
+==== Test read concurrency count: 50 =====
+total read object size 4096 KB
+read object size 64 KB
+concurrenct count 50
+total read duration 116.664584083 s
+total read throughput 35.10919815293677 KB/s
+read avg latency 3.987550745 s

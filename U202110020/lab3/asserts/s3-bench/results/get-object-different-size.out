@@ -1,0 +1,54 @@
+==== Test read object size: 8192 =====
+total read object size 2048 KB
+read object size 8 KB
+total read duration 6.665990334 s
+total read throughput 307.23116857132845 KB/s
+read avg latency 2.950156699s s
+==== Test read object size: 16384 =====
+total read object size 2048 KB
+read object size 16 KB
+total read duration 5.796312875 s
+total read throughput 353.3280628851492 KB/s
+read avg latency 2.30233405s s
+==== Test read object size: 32768 =====
+total read object size 2048 KB
+read object size 32 KB
+total read duration 9.701264875 s
+total read throughput 211.1064924407602 KB/s
+read avg latency 2.571570118s s
+==== Test read object size: 65536 =====
+total read object size 2048 KB
+read object size 64 KB
+total read duration 6.9586965 s
+total read throughput 294.3079928834373 KB/s
+read avg latency 2.750407101s s
+==== Test read object size: 131072 =====
+total read object size 2048 KB
+read object size 128 KB
+total read duration 5.354432292 s
+total read throughput 382.4868610365836 KB/s
+read avg latency 2.692162075s s
+==== Test read object size: 262144 =====
+total read object size 2048 KB
+read object size 256 KB
+total read duration 4.626035416 s
+total read throughput 442.71169929149545 KB/s
+read avg latency 3.04618414s s
+==== Test read object size: 524288 =====
+total read object size 2048 KB
+read object size 512 KB
+total read duration 4.747417 s
+total read throughput 431.3924814272687 KB/s
+read avg latency 3.324338562s s
+==== Test read object size: 1048576 =====
+total read object size 2048 KB
+read object size 1024 KB
+total read duration 5.13841925 s
+total read throughput 398.5661543674156 KB/s
+read avg latency 3.579832333s s
+==== Test read object size: 2097152 =====
+total read object size 2048 KB
+read object size 2048 KB
+total read duration 4.76596375 s
+total read throughput 429.7137173987108 KB/s
+read avg latency 3.759526084s s

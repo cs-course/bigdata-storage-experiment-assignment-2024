@@ -30,7 +30,7 @@ bucket_name = 'my-new-bucket'
 # print("+---------------------------------+")
 # 删除存储桶中的一个对象
 
-object_key = '《深空彼岸》.txt'
+object_key = 'huoying.jpg'
 s3_client.delete_object(Bucket=bucket_name, Key=object_key)
 print(f'Object {object_key} deleted from {bucket_name}.')
 print("+---------------------------------+")

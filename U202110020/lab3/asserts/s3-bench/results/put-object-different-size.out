@@ -1,0 +1,54 @@
+==== Test write object size: 8192 ====
+total write object size 2048 KB
+write object size 8 KB
+write total duration 4.011565125 s
+total write throughput 510.5239317285171 KB/s
+write avg latency 1.771475453s s
+==== Test write object size: 16384 ====
+total write object size 2048 KB
+write object size 16 KB
+write total duration 2.2378270000000002 s
+total write throughput 915.1735143065124 KB/s
+write avg latency 890.085249ms s
+==== Test write object size: 32768 ====
+total write object size 2048 KB
+write object size 32 KB
+write total duration 1.642047333 s
+total write throughput 1247.2234867056661 KB/s
+write avg latency 474.282653ms s
+==== Test write object size: 65536 ====
+total write object size 2048 KB
+write object size 64 KB
+write total duration 1.360041166 s
+total write throughput 1505.8367725907497 KB/s
+write avg latency 284.680443ms s
+==== Test write object size: 131072 ====
+total write object size 2048 KB
+write object size 128 KB
+write total duration 1.276702375 s
+total write throughput 1604.1326781427817 KB/s
+write avg latency 233.790737ms s
+==== Test write object size: 262144 ====
+total write object size 2048 KB
+write object size 256 KB
+write total duration 1.292761208 s
+total write throughput 1584.2059518233937 KB/s
+write avg latency 269.530942ms s
+==== Test write object size: 524288 ====
+total write object size 2048 KB
+write object size 512 KB
+write total duration 1.242622916 s
+total write throughput 1648.1266952588537 KB/s
+write avg latency 231.154104ms s
+==== Test write object size: 1048576 ====
+total write object size 2048 KB
+write object size 1024 KB
+write total duration 1.286574333 s
+total write throughput 1591.824076907028 KB/s
+write avg latency 274.449291ms s
+==== Test write object size: 2097152 ====
+total write object size 2048 KB
+write object size 2048 KB
+write total duration 1.296191208 s
+total write throughput 1580.013803025271 KB/s
+write avg latency 292.621417ms s

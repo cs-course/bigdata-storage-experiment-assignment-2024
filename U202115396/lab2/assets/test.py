@@ -1,13 +1,17 @@
 import boto3
 
-# 替换为您的 Minio 访问密钥 ID 和秘密访问密钥
-access_key = 'your-access-key'
-secret_key = 'your-secret-key'
+"""
+列出mock_s3中的所有存储桶
 
-# 指定 Minio Server 的端点 URL
-endpoint_url = 'your-minio-server.com'
+"""
 
-# 创建一个 Boto3 S3 客户端实例
+# mock_s3的access_key和secret_key可以任意指定
+access_key = '00000000-0000-0000-0000-000000000000'
+secret_key = '00000000-0000-0000-0000-000000000000'
+
+# 你的 Ceph 集群的 endpoint URL
+endpoint_url = 'http://127.0.0.1:9000'
+# 初始化客户端
 s3_client = boto3.client(
     's3',
     endpoint_url=endpoint_url,
@@ -15,9 +19,6 @@ s3_client = boto3.client(
     aws_secret_access_key=secret_key
 )
 
-# 现在您可以使用 s3_client 来执行对 Minio 的操作
 # 列出所有的存储桶
-buckets = s3_client.list_buckets()
-
-for bucket in buckets['Buckets']:
-    print(bucket['Name'])
+response = s3_client.list_buckets()
+print(response)   
