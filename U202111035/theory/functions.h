@@ -2,12 +2,11 @@
 #define OK 1
 #define ERROR -1
 int hash1(int key) {
-    return OK;
+    return key/CAPACITY;
 }
 
 int hash2(int key) {
-
-    return OK;
+    return key%CAPACITY;
 }
 
 int insert(int key) {

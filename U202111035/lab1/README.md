@@ -21,7 +21,7 @@
 |Windows 版本| 10.0.19045.4291
 # 对象存储服务器
 ## MinIO server
-MinIO 是一种高性能、S3 兼容的对象存储。 它专为大规模 AI/ML、数据湖和数据库工作负载而构建。 它是软件定义的，可以在任何云或本地基础设施上运行。 MinIO 拥有开源 GNU AGPL v3 和商业企业许可证的双重许可。\[[MinIO](https://min.io/)\]
+[MinIO](https://min.io/) 是一种高性能、S3 兼容的对象存储。 它专为大规模 AI/ML、数据湖和数据库工作负载而构建。 它是软件定义的，可以在任何云或本地基础设施上运行。 MinIO 拥有开源 GNU AGPL v3 和商业企业许可证的双重许可。
 
 使用如下命令下载 MinIO server 并启动 MinIO server：
 ```powershell
@@ -33,12 +33,31 @@ cd D:\Download
 ```
 在浏览器中打开 https://localhost:9001,输入账户名`admin`和密码`password`，即可进入 MinIO server 管理界面。
 ![](figure/MinIO_mainUI.png)
-进入MinIO server 管理界面后，可以看到 MinIO server 的基本信息，包括服务器状态、磁盘使用情况、服务器信息等。\
-在`Administrator`栏下新建一个桶`big-data-storage`，并上传`《Devilman Crybaby》`共十个mkv文件。\
+
+进入MinIO server 管理界面后，可以看到 MinIO server 的基本信息，包括服务器状态、磁盘使用情况、服务器信息等。
+
+在`Administrator`栏下新建一个桶`big-data-storage`，并上传`《Devilman Crybaby》`共十个mkv文件。
+
 退出 MinIO server 管理界面后，可以在`D:\Download\miscellaneous\big-data-storage\Devilman crybaby`中找到MinIO server 的桶和文件，如下图所示。
 ![](figure/MinIO_bucket.png)
 ## Openstack Swift
-
+待补充
 # 对象存储客户端
 ## MinIO client
-MinIO client 是一个开源的命令行工具，用于上传、下载和管理文件。MinIO client 支持文件系统和 Amazon S3 兼容的云存储服务。MinIO client 是 MinIO server 的一个客户端工具，可以通过 MinIO client 连接到 MinIO server 并管理文件。MinIO client 是一个独立的二进制文件，可以在 Linux、Mac 和 Windows 上运行。MinIO client 是一个开源项目，使用 Apache License 2.0 许可证。\[[MinIO client](https://docs.min.io/docs/minio-client-quickstart-guide)\]
+[MinIO client](https://docs.min.io/docs/minio-client-quickstart-guide) 是一个开源的命令行工具，用于上传、下载和管理文件。MinIO client 支持文件系统和 Amazon S3 兼容的云存储服务。MinIO client 是 MinIO server 的一个客户端工具，可以通过 MinIO client 连接到 MinIO server 并管理文件。MinIO client 是一个独立的二进制文件，可以在 Linux、Mac 和 Windows 上运行。MinIO client 是一个开源项目，使用 Apache License 2.0 许可证。
+
+使用如下命令下载 MinIO client：
+```powershell
+Invoke-WebRequest -Uri "https://dl.minio.io/client/mc/release/windows-amd64/mc.exe" -OutFile "D:\Download\mc.exe"
+D:\Download\mc.exe alias set myminio/ http://MINIO-SERVER MYUSER MYPASSWORD
+```
+使用如下命令上传文件到 MinIO server：
+```powershell
+D:\Download\mc.exe cp D:\Download\miscellaneous\big-data-storage\Devilman\ myminio/big-data-storage/Devilman --recursive
+```
+使用如下命令下载文件到本地：
+```powershell
+D:\Download\mc.exe cp myminio/big-data-storage/Devilman D:\Download\miscellaneous\big-data-storage\Devilman --recursive
+```
+## Openstack Swift client
+待补充
