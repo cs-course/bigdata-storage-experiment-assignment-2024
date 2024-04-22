@@ -1,0 +1,4 @@
+#define NUM 10000000
+#define LIMIT 100000
+#define CAPACITY 100000
+#define LOAD_FACTOR 0.75
