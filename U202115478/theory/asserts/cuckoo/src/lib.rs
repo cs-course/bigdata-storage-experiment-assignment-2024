@@ -158,4 +158,34 @@ mod tests {
             timer.elapsed().as_millis()
         );
     }
+    #[test]
+    fn test_args() {
+        use cuckoo::Cuckoo;
+        use rand::random;
+        use std::{iter::from_fn, time::Instant};
+        let size: usize = 100_0000usize;
+        let key: Vec<usize> = from_fn(|| Some(random())).take(size).collect();
+        let value: Vec<usize> = from_fn(|| Some(random())).take(size).collect();
+
+        let loop_time_dec = vec![(16usize, 2usize), (12, 2), (8, 2), (4, 2)];
+        let double_factor = vec![(16usize, 4usize), (12, 4), (8, 4), (4, 4)];
+        let test_fn = |test_vec: &Vec<(usize, usize)>| {
+            for (loop_times, factor) in test_vec {
+                let mut kuku = Cuckoo::new(16, 4, *factor);
+                kuku.set_max_loop_times(*loop_times);
+                let timer = Instant::now();
+                for (k, v) in key.iter().zip(value.iter()) {
+                    kuku.insert(*k, *v);
+                }
+                println!(
+                    "loop_times={},factor={},insert 100_0000 (usize,usize) cost {}ms",
+                    loop_times,
+                    factor,
+                    timer.elapsed().as_millis()
+                );
+            }
+        };
+        test_fn(&loop_time_dec);
+        test_fn(&double_factor);
+    }
 }

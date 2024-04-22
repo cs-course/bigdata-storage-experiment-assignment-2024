@@ -14,10 +14,14 @@ fn main() {
     let mut kuku: Cuckoo<Custom, usize> = Cuckoo::default();
     // 指定参数构造
     let _: Cuckoo<Custom, usize> = Cuckoo::new(8, 4, 2);
+    // 使用 set_max_loop_times设置插入时最大循环次数
+    kuku.set_max_loop_times(4);
     // 使用insert插入
     for (k, v) in key.clone().into_iter().zip(value.clone().into_iter()) {
         kuku.insert(k, v);
     }
+    // 使用empty检验是否为空
+    assert_eq!(false, kuku.empty());
     // 使用size获取大小
     assert_eq!(kuku.size(), key.len());
     // 使用utilization_rate查看空间利用率
