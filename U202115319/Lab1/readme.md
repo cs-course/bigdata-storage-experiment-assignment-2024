@@ -8,8 +8,24 @@ WSL-Ubuntu-18.04
 
 # 实验记录
 
-## 实验X-1：……
-……
+## 实验1-1：搭建minio服务端
+
+![alt](./figure/直接启动minio_server.png)
+
+下载minio并配置系统路径及文件权限后直接启动
+可以看到如上图的启动信息
+
+
+![alt](./figure/使用脚本后台启动并查看进程(固定端口号).png)
+
+
+![alt](./figure/查看启动日志.png)
+
+
+## 实验1-2：查看并测试minio服务端
+
+![alt](./figure/浏览器控制台.png)
+
 
 # 实验小结
 
