@@ -1,0 +1,88 @@
+object_size: 1 KB
+num_samples: 1024
+write_total_throughput: 0.07952313542191379 KB/s
+write_average_latency: 124.76296067237854 s
+object_size: 1 KB
+num_samples: 1024
+read_total_throughput: 0.020754729277223216 KB/s
+read_average_latency: 480.36789536476135 s
+object_size: 2 KB
+num_samples: 512
+write_total_throughput: 0.11592697085958097 KB/s
+write_average_latency: 171.7887659072876 s
+object_size: 2 KB
+num_samples: 512
+read_total_throughput: 0.09420305544353128 KB/s
+read_average_latency: 211.69678592681885 s
+object_size: 4 KB
+num_samples: 256
+write_total_throughput: 0.2637317475363399 KB/s
+write_average_latency: 150.1280107498169 s
+object_size: 4 KB
+num_samples: 256
+read_total_throughput: 0.5309574225543834 KB/s
+read_average_latency: 74.07769584655762 s
+object_size: 8 KB
+num_samples: 128
+write_total_throughput: 0.48217789741299383 KB/s
+write_average_latency: 158.9188632965088 s
+object_size: 8 KB
+num_samples: 128
+read_total_throughput: 1.168159299311187 KB/s
+read_average_latency: 66.54462623596191 s
+object_size: 16 KB
+num_samples: 64
+write_total_throughput: 1.1101698907962099 KB/s
+write_average_latency: 138.9730453491211 s
+object_size: 16 KB
+num_samples: 64
+read_total_throughput: 2.218525300674607 KB/s
+read_average_latency: 66.15412139892578 s
+object_size: 32 KB
+num_samples: 32
+write_total_throughput: 2.3362105890511295 KB/s
+write_average_latency: 126.52230072021484 s
+object_size: 32 KB
+num_samples: 32
+read_total_throughput: 3.703847872428732 KB/s
+read_average_latency: 75.615234375 s
+object_size: 64 KB
+num_samples: 16
+write_total_throughput: 4.682423207238586 KB/s
+write_average_latency: 112.14668273925781 s
+object_size: 64 KB
+num_samples: 16
+read_total_throughput: 7.724900038492778 KB/s
+read_average_latency: 60.5098876953125 s
+object_size: 128 KB
+num_samples: 8
+write_total_throughput: 7.38693906305037 KB/s
+write_average_latency: 109.78253173828125 s
+object_size: 128 KB
+num_samples: 8
+read_total_throughput: 13.846517493413971 KB/s
+read_average_latency: 57.254547119140625 s
+object_size: 256 KB
+num_samples: 4
+write_total_throughput: 11.348163700412876 KB/s
+write_average_latency: 76.56170654296875 s
+object_size: 256 KB
+num_samples: 4
+read_total_throughput: 5.05907739441419 KB/s
+read_average_latency: 122.71734619140625 s
+object_size: 512 KB
+num_samples: 2
+write_total_throughput: 17.383194147999255 KB/s
+write_average_latency: 54.3333740234375 s
+object_size: 512 KB
+num_samples: 2
+read_total_throughput: 26.363021533897346 KB/s
+read_average_latency: 32.8365478515625 s
+object_size: 1024 KB
+num_samples: 1
+write_total_throughput: 18.32862405446624 KB/s
+write_average_latency: 54.60888671875 s
+object_size: 1024 KB
+num_samples: 1
+read_total_throughput: 19.28194000689576 KB/s
+read_average_latency: 51.916259765625 s
