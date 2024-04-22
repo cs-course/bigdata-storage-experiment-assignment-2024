@@ -1,0 +1,6 @@
+﻿  main.cpp
+C:\Users\Administrator\Desktop\U202115380 bigdata\bigdata-storage-experiment-assignment-2024\U202115380\课程\Cukoo-driven Way\main.cpp(42,11): warning C5051: 特性“fallthrough”至少需要“/std:c++17”；已忽略
+C:\Users\Administrator\Desktop\U202115380 bigdata\bigdata-storage-experiment-assignment-2024\U202115380\课程\Cukoo-driven Way\main.cpp(45,11): warning C5051: 特性“fallthrough”至少需要“/std:c++17”；已忽略
+C:\Users\Administrator\Desktop\U202115380 bigdata\bigdata-storage-experiment-assignment-2024\U202115380\课程\Cukoo-driven Way\main.cpp(92,1): warning C4267: “参数”: 从“size_t”转换到“uint32_t”，可能丢失数据
+C:\Users\Administrator\Desktop\U202115380 bigdata\bigdata-storage-experiment-assignment-2024\U202115380\课程\Cukoo-driven Way\main.cpp(104,30): warning C4244: “初始化”: 从“__int64”转换到“int”，可能丢失数据
+  Cukoo-driven Way.vcxproj -> C:\Users\Administrator\Desktop\U202115380 bigdata\bigdata-storage-experiment-assignment-2024\U202115380\课程\Cukoo-driven Way\x64\Debug\Cukoo-driven Way.exe
