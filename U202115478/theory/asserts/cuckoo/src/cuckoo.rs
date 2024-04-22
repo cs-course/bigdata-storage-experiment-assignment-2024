@@ -5,7 +5,7 @@ use std::{
     collections::hash_map::DefaultHasher,
     hash::{Hash, Hasher},
     mem::swap,
-    ops::Index,
+    ops::{Index, IndexMut},
 };
 type HashImplOne = DefaultHasher;
 type HashImplTwo = FnvHasher;
@@ -15,43 +15,9 @@ pub struct Cuckoo<K, V> {
     slot_size: usize,
     factor: usize,
     used: usize,
+    max_loop_times: usize,
     bucket_one: Vec<Vec<Option<(K, V)>>>,
     bucket_two: Vec<Vec<Option<(K, V)>>>,
-}
-/// 默认初始化
-/// bucket_size:16
-/// slot_size:4
-/// max_loop_times:4
-/// factor:4
-impl<K, V> Default for Cuckoo<K, V>
-where
-    K: Clone,
-    V: Clone,
-{
-    fn default() -> Self {
-        let bucket_size = Cuckoo::<K, V>::BUCKET_SIZE;
-        let slot_size = Cuckoo::<K, V>::SLOT_SIZE;
-        let factor = Cuckoo::<K, V>::FACTOR;
-        Cuckoo {
-            bucket_size,
-            slot_size,
-            factor,
-            used: 0,
-            bucket_one: vec![vec![None; slot_size]; bucket_size],
-            bucket_two: vec![vec![None; slot_size]; bucket_size],
-        }
-    }
-}
-/// 重载运算符[],不存在对应的key就Panic
-impl<K, V, Q> Index<&Q> for Cuckoo<K, V>
-where
-    K: Eq + Hash + Borrow<Q>,
-    Q: Eq + Hash + ?Sized,
-{
-    type Output = V;
-    fn index(&self, k: &Q) -> &Self::Output {
-        self.get(k).unwrap()
-    }
 }
 
 impl<K, V> Cuckoo<K, V> {
@@ -71,6 +37,7 @@ impl<K, V> Cuckoo<K, V> {
             bucket_size,
             slot_size,
             factor,
+            max_loop_times: Cuckoo::<K, V>::MAX_LOOP_TIMES,
             used: 0,
             bucket_one: vec![vec![None; slot_size]; bucket_size],
             bucket_two: vec![vec![None; slot_size]; bucket_size],
@@ -84,7 +51,7 @@ impl<K, V> Cuckoo<K, V> {
         K: Eq + Hash + Clone,
         V: Clone,
     {
-        match self.__index_of_key(&k) {
+        match self.index_of_key(&k) {
             (0, p, idx) => {
                 self.bucket_one[p][idx] = Some((k, v));
                 return true;
@@ -96,7 +63,7 @@ impl<K, V> Cuckoo<K, V> {
             _ => {}
         }
         self.used += 1;
-        if let Some(pair) = self.__insert(k, v) {
+        if let Some(pair) = self.try_insert(k, v) {
             // rehash
             let mut new_kuku =
                 Cuckoo::new(self.bucket_size * self.factor, self.slot_size, self.factor);
@@ -118,12 +85,12 @@ impl<K, V> Cuckoo<K, V> {
         true
     }
     /// 单次插入,成功返回None，否则返回需要插入的(k,v)
-    fn __insert(&mut self, k: K, v: V) -> Option<(K, V)>
+    fn try_insert(&mut self, k: K, v: V) -> Option<(K, V)>
     where
         K: Eq + Hash,
     {
         let mut pair = (k, v);
-        for _ in 0usize..Cuckoo::<K, V>::MAX_LOOP_TIMES {
+        for _ in 0usize..self.max_loop_times {
             let p1 = self.h1(&pair.0);
             if let Some((idx, _)) = self.bucket_one[p1]
                 .iter()
@@ -159,7 +126,7 @@ impl<K, V> Cuckoo<K, V> {
         Some(pair)
     }
     // 查找指定key对应的 桶索引和槽索引
-    fn __index_of_key<Q>(&self, k: &Q) -> (isize, usize, usize)
+    fn index_of_key<Q>(&self, k: &Q) -> (isize, usize, usize)
     where
         K: Borrow<Q> + Eq,
         Q: Hash + Eq + ?Sized,
@@ -189,7 +156,7 @@ impl<K, V> Cuckoo<K, V> {
         K: Borrow<Q> + Eq,
         Q: Hash + Eq + ?Sized,
     {
-        match self.__index_of_key(k) {
+        match self.index_of_key(k) {
             (0 | 1, _, _) => true,
             _ => false,
         }
@@ -200,7 +167,7 @@ impl<K, V> Cuckoo<K, V> {
         K: Borrow<Q> + Eq,
         Q: Hash + Eq + ?Sized,
     {
-        match self.__index_of_key(k) {
+        match self.index_of_key(k) {
             (0, p, idx) => {
                 self.used -= 1;
                 self.bucket_one[p][idx].take();
@@ -214,15 +181,27 @@ impl<K, V> Cuckoo<K, V> {
             _ => false,
         }
     }
-    /// 获取key对应的value
+    /// 获取key对应的 mut value
     pub fn get<Q>(&self, k: &Q) -> Option<&V>
     where
         K: Borrow<Q> + Eq,
         Q: Hash + Eq + ?Sized,
     {
-        match self.__index_of_key(k) {
+        match self.index_of_key(k) {
             (0, p, idx) => Some(&self.bucket_one[p][idx].as_ref().unwrap().1),
             (1, p, idx) => Some(&self.bucket_two[p][idx].as_ref().unwrap().1),
+            _ => None,
+        }
+    }
+    /// 获取key对应的value
+    pub fn get_mut<Q>(&mut self, k: &Q) -> Option<&mut V>
+    where
+        K: Borrow<Q> + Eq,
+        Q: Hash + Eq + ?Sized,
+    {
+        match self.index_of_key(k) {
+            (0, p, idx) => Some(&mut self.bucket_one[p][idx].as_mut().unwrap().1),
+            (1, p, idx) => Some(&mut self.bucket_two[p][idx].as_mut().unwrap().1),
             _ => None,
         }
     }
@@ -245,9 +224,17 @@ impl<K, V> Cuckoo<K, V> {
                 op.take();
             });
     }
+    /// 是否为空
+    pub fn empty(&self) -> bool {
+        self.used == 0
+    }
     /// 设置扩容因子,new_capacity = old_capacity * factor
     pub fn set_factor(&mut self, factor: usize) {
         self.factor = factor;
+    }
+    /// 设置最大循环次数
+    pub fn set_max_loop_times(&mut self, max_loop_times: usize) {
+        self.max_loop_times = max_loop_times;
     }
     /// 将内部结构自带的迭代器串联并展开作为Cuckoo的迭代器
     pub fn iter(&self) -> impl Iterator<Item = (&K, &V)> {
@@ -292,5 +279,53 @@ impl<K, V> Cuckoo<K, V> {
         let mut state = HashImplTwo::default();
         k.hash(&mut state);
         (state.finish() % self.bucket_size as u64) as usize
+    }
+}
+
+/// 默认初始化
+/// bucket_size:16
+/// slot_size:4
+/// max_loop_times:4
+/// factor:4
+impl<K, V> Default for Cuckoo<K, V>
+where
+    K: Clone,
+    V: Clone,
+{
+    fn default() -> Self {
+        let bucket_size = Cuckoo::<K, V>::BUCKET_SIZE;
+        let slot_size = Cuckoo::<K, V>::SLOT_SIZE;
+        let factor = Cuckoo::<K, V>::FACTOR;
+        let max_loop_times = Cuckoo::<K, V>::MAX_LOOP_TIMES;
+        Cuckoo {
+            bucket_size,
+            slot_size,
+            factor,
+            max_loop_times,
+            used: 0,
+            bucket_one: vec![vec![None; slot_size]; bucket_size],
+            bucket_two: vec![vec![None; slot_size]; bucket_size],
+        }
+    }
+}
+/// 重载运算符[],不存在对应的key就Panic
+impl<K, V, Q> Index<&Q> for Cuckoo<K, V>
+where
+    K: Eq + Hash + Borrow<Q>,
+    Q: Eq + Hash + ?Sized,
+{
+    type Output = V;
+    fn index(&self, k: &Q) -> &Self::Output {
+        self.get(k).unwrap()
+    }
+}
+
+impl<K, V, Q> IndexMut<&Q> for Cuckoo<K, V>
+where
+    K: Eq + Hash + Borrow<Q>,
+    Q: Eq + Hash + ?Sized,
+{
+    fn index_mut(&mut self, k: &Q) -> &mut Self::Output {
+        self.get_mut(k).unwrap()
     }
 }
