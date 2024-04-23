@@ -16,5 +16,5 @@
 |实验|工具|
 |:---|:---|
 |服务端|minIO Server|
-|客户端|mc, boto3|
-|性能分析|s3bench, py-boto|
+|客户端|mc & boto3|
+|性能分析|s3bench & py-boto|
