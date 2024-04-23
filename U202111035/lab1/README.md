@@ -31,7 +31,7 @@ setx MINIO_ROOT_PASSWORD password
 cd D:\Download
 .\minio.exe server D:\Download\miscellaneous\ --console-address ":9001"
 ```
-在浏览器中打开 https://localhost:9001,输入账户名`admin`和密码`password`，即可进入 MinIO server 管理界面。
+在浏览器中打开 `https://localhost:9001`,输入账户名`admin`和密码`password`，即可进入 MinIO server 管理界面。
 ![](figure/MinIO_mainUI.png)
 
 进入MinIO server 管理界面后，可以看到 MinIO server 的基本信息，包括服务器状态、磁盘使用情况、服务器信息等。
