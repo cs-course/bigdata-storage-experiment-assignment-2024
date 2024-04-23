@@ -7,11 +7,17 @@ Virtual Machine: VMware Workstation 17
 OS: Ubuntu22.04
 CPU: Ryzen R7 5800H
 RAM: 8G
-Server: Swift
-Client: Swift-client
+Server: Swift、minio
+Client: Swift-client、s3bench
 ```
 
 # 实验记录
+
+## 使用s3bench对minio服务器进行测试
+
+脚本见/asset/s3bench.sh
+
+由于swift服务器天然不兼容s3接口，因此下面使用swift-client对swift服务器进行测试
 
 ## 实验3-1: 探究对象大小对尾延迟的影响
 
