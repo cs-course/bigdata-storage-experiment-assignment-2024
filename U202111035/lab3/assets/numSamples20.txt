@@ -1,0 +1,59 @@
+﻿Test parameters
+endpoint(s):      [http://localhost:9000]
+bucket:           big-data-storage
+objectNamePrefix: loadgen
+objectSize:       0.0005 MB
+numClients:       2
+numSamples:       20
+verbose:       %!d(bool=false)
+
+
+Generating in-memory sample data... Done (0s)
+
+Running Write test...
+
+Running Read test...
+
+Test parameters
+endpoint(s):      [http://localhost:9000]
+bucket:           big-data-storage
+objectNamePrefix: loadgen
+objectSize:       0.0005 MB
+numClients:       2
+numSamples:       20
+verbose:       %!d(bool=false)
+
+
+Results Summary for Write Operation(s)
+Total Transferred: 0.010 MB
+Total Throughput:  0.04 MB/s
+Total Duration:    0.238 s
+Number of Errors:  0
+------------------------------------
+Write times Max:       0.057 s
+Write times 99th %ile: 0.057 s
+Write times 90th %ile: 0.057 s
+Write times 75th %ile: 0.018 s
+Write times 50th %ile: 0.018 s
+Write times 25th %ile: 0.015 s
+Write times Min:       0.014 s
+
+
+Results Summary for Read Operation(s)
+Total Transferred: 0.010 MB
+Total Throughput:  0.25 MB/s
+Total Duration:    0.039 s
+Number of Errors:  0
+------------------------------------
+Read times Max:       0.005 s
+Read times 99th %ile: 0.005 s
+Read times 90th %ile: 0.004 s
+Read times 75th %ile: 0.004 s
+Read times 50th %ile: 0.004 s
+Read times 25th %ile: 0.004 s
+Read times Min:       0.003 s
+
+
+Cleaning up 20 objects...
+Deleting a batch of 20 objects in range {0, 19}... Succeeded
+Successfully deleted 20/20 objects in 102.9449ms
