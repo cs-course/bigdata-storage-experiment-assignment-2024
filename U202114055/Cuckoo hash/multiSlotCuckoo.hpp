@@ -31,7 +31,7 @@ class multi_slot_cuckoo {
             int32_t h = std::hash<K>{}(key);
             return (h ^ (0x9e3779b9 + (1ll * h << 6) + (h >> 2))) % capacity;
         }
-        
+
     public:
         multi_slot_cuckoo(int32_t capacity, int32_t max_depth = 10, int32_t slot_num = 4, uint32_t seedValue = 0) 
                     : capacity(capacity), max_depth(max_depth), seed(seedValue), Size(0), bitset1(capacity), bitset2(capacity) {
@@ -91,9 +91,23 @@ class multi_slot_cuckoo {
             return false;
         }
 
+        V operator[](const K &key) const {
+            int32_t index1 = my_hash1(key);
+            if (bitset1[index1] && hashTable1[index1].first == key) {
+                return hashTable1[index1].second;
+            }
+            int32_t index2 = my_hash2(key);
+            if (bitset2[index2] && hashTable2[index2].first == key) {
+                return hashTable2[index2].second;
+            }
+            // 没找到，抛出异常
+            throw std::out_of_range("Key not found");
+        }
+
         inline uint32_t size() {
             return Size;
         }
+        
         inline uint32_t get_seed() {
             return seed;
         }
