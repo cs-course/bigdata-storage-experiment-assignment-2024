@@ -1,1 +1,1 @@
-this folder contains figures of assets
+this folder contains asserts of lab0

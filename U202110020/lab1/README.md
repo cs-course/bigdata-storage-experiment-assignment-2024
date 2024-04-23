@@ -73,13 +73,13 @@ docker run -d --name openstack-swift -p 12345:8080 --volumes-from SWIFT_DATA -t 
 
 ![](./figure/image-1.png)
 
-​	为了使openstack-swift兼容s3协议，需要安装swift `pip install swift`，安装之后s3api middleware也安装成功。（由于docker镜像里的python默认为3.5版本，在安装pip时出现一点问题，因此参考https://linuxize.com/post/how-to-install-python-3-9-on-ubuntu-20-04/通过源码安装python3.9，之后安装最新pip，再安装swift）
+​	为了使openstack-swift兼容s3协议，需要安装swift `pip install swift`，安装之后s3api middleware也安装成功。（由于docker镜像里的python默认为3.5版本，在安装pip时出现一点问题，因此参考https://linuxize.com/post/how-to-install-python-3-9-on-ubuntu-20-04/ 通过源码安装python3.9，之后安装最新pip，再安装swift）
 
 ​	之后`vim /etc/swift/proxy-server.conf` 修改配置文件，如图所示在pipeline中加入s3api middleware的调用。
 
 ![](./figure/image-2.png)
 
-​	 `swift-init restart all` 重启 OpenStack Swift 的所有服务，发现出现dynamic linking error的问题，经过查阅后根据https://github.com/openstack/liberasurecode编译安装liberasurecode后解决。
+​	 `swift-init restart all` 重启 OpenStack Swift 的所有服务，发现出现dynamic linking error的问题，经过查阅后根据https://github.com/openstack/liberasurecode 编译安装liberasurecode后解决。
 
 ![](./figure/image-3.png)
 
