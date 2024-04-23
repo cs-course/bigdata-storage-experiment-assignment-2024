@@ -1,1 +1,3 @@
-this folder stores all the scripts and programs.
+- my_s3_benchmark 文件夹是实现的简单的 s3 性能测试程序。
+- get_output_file.txt 文件是测试程序 get.rs 的输出文件对象。
+- put_testfile.txt 文件是测试程序 put.rs 的输入文件对象。

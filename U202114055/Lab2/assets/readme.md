@@ -1,1 +1,3 @@
-this folder stores all the scripts and programs.
+该文件夹中botoClient.py是一开始用于检测是否能够连接上swift s3服务的测试客户端（因为一开始我的rust客户端连接不上）
+
+而rust_client中的文件则是我主要实现的使用rust以及aws sdk for rust实现的客户端，进入到文件夹之后使用cargo run即可运行。
