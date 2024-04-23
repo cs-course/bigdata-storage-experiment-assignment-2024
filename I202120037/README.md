@@ -7,12 +7,14 @@
 
 # 课程报告简介
 
-……
+|选题|实现工具|
+|:----|:----|
+|Cuckoo-Driven Way|Python|
 
 # 实验内容简介
 
 |实验|工具|
 |:---|:---|
 |服务端|minIO Server|
-|客户端|mc, boto3|
-|性能分析|s3bench, py-boto|
+|客户端|mc & boto3|
+|性能分析|s3bench & py-boto|
