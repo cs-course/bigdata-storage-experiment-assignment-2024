@@ -1,0 +1,1 @@
+mc rm myminio/bucket0/remotefile2.txt
