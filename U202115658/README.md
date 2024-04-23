@@ -8,8 +8,12 @@
 
 # 课程报告简介
 
-……
+实现了基于Bloom Filter的设计
 
 # 实验内容简介
 
-……
+服务端：Minio Server
+
+客户端：Minio Client
+
+评测：s3-bench
