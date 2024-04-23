@@ -14,6 +14,6 @@
 
 服务端：Minio Server
 
-客户端：Minio Client
+客户端：Minio Client 、Boto3
 
 评测：s3-bench
