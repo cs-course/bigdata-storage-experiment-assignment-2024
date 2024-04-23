@@ -1,0 +1,108 @@
+num_client: 1 
+write_total_throughput: 60.84734362293361 KB/s
+write_average_latency: 0.13142414018511772 s
+num_client: 1 
+read_total_throughput: 86.40949765707514 KB/s
+read_average_latency: 0.09253182774409652 s
+num_client: 2 
+write_total_throughput: 134.91726135161488 KB/s
+write_average_latency: 0.11854843655601144 s
+num_client: 2 
+read_total_throughput: 42.23510253952165 KB/s
+read_average_latency: 0.3787755239754915 s
+num_client: 3 
+write_total_throughput: 224.39826434066038 KB/s
+write_average_latency: 0.10670880228281021 s
+num_client: 3 
+read_total_throughput: 27.48780283301373 KB/s
+read_average_latency: 0.6520114354789257 s
+num_client: 4 
+write_total_throughput: 256.0571760055787 KB/s
+write_average_latency: 0.11549842171370983 s
+num_client: 4 
+read_total_throughput: 30.367026729311714 KB/s
+read_average_latency: 0.772692549508065 s
+num_client: 5 
+write_total_throughput: 352.5881632379054 KB/s
+write_average_latency: 0.11323011899366975 s
+num_client: 5 
+read_total_throughput: 39.72266217769112 KB/s
+read_average_latency: 0.9596601189114153 s
+num_client: 6 
+write_total_throughput: 413.7444542106754 KB/s
+write_average_latency: 0.11559534724801779 s
+num_client: 6 
+read_total_throughput: 32.34334644714153 KB/s
+read_average_latency: 1.1986715150997043 s
+num_client: 7 
+write_total_throughput: 434.4375113904794 KB/s
+write_average_latency: 0.1283435421064496 s
+num_client: 7 
+read_total_throughput: 28.805694205439153 KB/s
+read_average_latency: 1.5936135188676417 s
+num_client: 8 
+write_total_throughput: 492.04888723356555 KB/s
+write_average_latency: 0.12928238697350025 s
+num_client: 8 
+read_total_throughput: 27.186719998281305 KB/s
+read_average_latency: 1.6888539819046855 s
+num_client: 9 
+write_total_throughput: 506.4213920863656 KB/s
+write_average_latency: 0.14128782227635384 s
+num_client: 9 
+read_total_throughput: 31.78913136791665 KB/s
+read_average_latency: 1.9867318728938699 s
+num_client: 10 
+write_total_throughput: 528.8845894232744 KB/s
+write_average_latency: 0.14966829866170883 s
+num_client: 10 
+read_total_throughput: 29.989988546390524 KB/s
+read_average_latency: 2.346305628772825 s
+num_client: 20 
+write_total_throughput: 594.3102347263095 KB/s
+write_average_latency: 0.2654783222824335 s
+num_client: 20 
+read_total_throughput: 27.610757522329326 KB/s
+read_average_latency: 4.484388875309378 s
+num_client: 30 
+write_total_throughput: 582.6840839207136 KB/s
+write_average_latency: 0.4058819254860282 s
+num_client: 30 
+read_total_throughput: 27.71632943601238 KB/s
+read_average_latency: 6.772116089705378 s
+num_client: 40 
+write_total_throughput: 553.7349264904841 KB/s
+write_average_latency: 0.5695921066217124 s
+num_client: 40 
+read_total_throughput: 25.978826871079672 KB/s
+read_average_latency: 7.790840127039701 s
+num_client: 50 
+write_total_throughput: 559.6702697370624 KB/s
+write_average_latency: 0.7000508899800479 s
+num_client: 50 
+read_total_throughput: 16.505149594966788 KB/s
+read_average_latency: 15.915436196140945 s
+num_client: 60 
+write_total_throughput: 419.82359513565905 KB/s
+write_average_latency: 0.7805501352995634 s
+num_client: 60 
+read_total_throughput: 28.65856444624485 KB/s
+read_average_latency: 13.597550228703767 s
+num_client: 70 
+write_total_throughput: 484.7741025494656 KB/s
+write_average_latency: 1.1301266713999212 s
+num_client: 70 
+read_total_throughput: 29.35532895556155 KB/s
+read_average_latency: 16.17539625428617 s
+num_client: 80 
+write_total_throughput: 521.6462742512709 KB/s
+write_average_latency: 1.1762574459426105 s
+num_client: 80 
+read_total_throughput: 12.32806181850482 KB/s
+read_average_latency: 24.20248857140541 s
+num_client: 90 
+write_total_throughput: 322.13055818431883 KB/s
+write_average_latency: 1.3140102699398994 s
+num_client: 90 
+read_total_throughput: 16.43339163730816 KB/s
+read_average_latency: 23.280906945932657 s
