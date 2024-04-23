@@ -15,16 +15,31 @@ class CUCKOO2 {
         int32_t max_depth;
         uint32_t Size;
         uint32_t seed;
+        uint32_t seize_times = 0, total_depth = 0; // for test
         std::default_random_engine generator; // 随机数生成器
         std::uniform_int_distribution<int32_t> distribution; // 分布对象
         std::vector<std::pair<K, V>> hashTable1;
         std::vector<int8_t> bitset1; // bitset 不能动态设置大小，vector<bool>有缺陷
         std::vector<std::pair<K, V>> hashTable2;
         std::vector<int8_t> bitset2;
-        
+
+        int32_t my_hash1(const K &key) const {
+            return std::hash<K>{}(key) % capacity;
+        }
+
+        int32_t my_hash2(const K &key) const {
+            int32_t h = std::hash<K>{}(key);
+            return (h ^ (0x9e3779b9 + (1ll * h << 6) + (h >> 2))) % capacity;
+        }
+        /*
+        @param tableIndex 目前所在的表
+        @param index 目前需要移到备用位置的对象的index
+        @param depth 已经找了几层了
+        @return 在第几层找到的（移动了几个原有的）
+        */
         int32_t seize_place(int8_t tableIndex, int32_t index, int32_t depth) {
             
-            if (depth >= max_depth) {
+            if (depth > max_depth) {
                 return 0;
             }
             auto my_hash = (tableIndex ^ 1) ? &CUCKOO2::my_hash2 : &CUCKOO2::my_hash1;
@@ -44,15 +59,6 @@ class CUCKOO2 {
             nextBitset[nextIndex] = true;
             nextHashTable[nextIndex] = hashTable[index];
             return ret;
-        }
-
-        int32_t my_hash1(const K &key) const {
-            return std::hash<K>{}(key) % capacity;
-        }
-
-        int32_t my_hash2(const K &key) const {
-            int32_t h = std::hash<K>{}(key);
-            return (h ^ (0x9e3779b9 + (1ll * h << 6) + (h >> 2))) % capacity;
         }
         // void expand_capacity() { //扩容之后 capacity 就不是质数了，碰撞概率大大增加
         //     int32_t preCapacity = capacity;
@@ -116,12 +122,16 @@ class CUCKOO2 {
 
             if (!free1 && !free2) {
                 int32_t depth = 0;
+                seize_times ++;
                 if (!(depth = seize_place(random_num, index, 1))) {
+                    total_depth += max_depth; // 失败肯定搜满了
+
                     random_num ^= 1; // 随机的插入遇到死循环了，试试另一边
                     int32_t index = random_num ? index2 : index1;
                     std::vector<int8_t>& bitset = random_num ? bitset2 : bitset1;
                     std::vector<std::pair<K,V>>& hashTable = random_num ? hashTable2 : hashTable1;
                     if (!(depth = seize_place(random_num, index, 1))) {
+                        total_depth += max_depth;
                         // 都不行，报错
                         // expand_capacity();
                         #ifdef __CUCKOO2_DEBUG__
@@ -129,11 +139,16 @@ class CUCKOO2 {
                         #endif
                         return false;
                     }
+                    #ifdef __CUCKOO2_DEBUG__
+                        printf("Seized place for %d cycles.\n", depth);
+                    #endif
+                    total_depth += depth;
                     bitset[index] = true; // 这里换了引用
                     hashTable[index] = std::pair<K, V>(key, data);
                     Size ++;
                     return true;
                 }
+                total_depth += depth;
                 #ifdef __CUCKOO2_DEBUG__
                     printf("Seized place for %d cycles.\n", depth);
                 #endif
@@ -177,10 +192,10 @@ class CUCKOO2 {
             return false;
         }
 
-        V& operator[](const K &key) const {
+        V& operator[](const K &key) {
             int32_t index1 = my_hash1(key);
             if (bitset1[index1] && hashTable1[index1].first == key) {
-                return std::get<1>(hashTable1[index1]);//.second;
+                return std::get<1>(hashTable1[index1]);//.second; 返回second的引用
             }
             int32_t index2 = my_hash2(key);
             if (bitset2[index2] && hashTable2[index2].first == key) {
@@ -195,6 +210,11 @@ class CUCKOO2 {
         }
         inline uint32_t get_seed() const {
             return seed;
+        }
+        // 因为有的要两边找，所以平均大于max_depth是正常的
+        void printInfo() const {
+            if (seize_times)
+            printf("Seized for %d times, average serached for %lf layers.\n", seize_times, 1.0 * total_depth / seize_times);
         }
 };
 
