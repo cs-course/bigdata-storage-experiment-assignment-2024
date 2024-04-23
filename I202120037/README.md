@@ -7,7 +7,9 @@
 
 # 课程报告简介
 
-Cuckoo-Driven Way
+|选题|实现工具|
+|:----|:----|
+|Cuckoo-Driven Way|Python|
 
 # 实验内容简介
 
