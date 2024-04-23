@@ -5,6 +5,7 @@
 #include <ctime> // for std::time
 #include <vector>
 #include <random>
+#include <stdexcept>
 #include <functional> // for std::hash
 
 template<typename K, typename V>
@@ -21,7 +22,8 @@ class CUCKOO2 {
         std::vector<std::pair<K, V>> hashTable2;
         std::vector<int8_t> bitset2;
         
-        int32_t seize_place(int8_t tableIndex, int32_t index, int32_t depth)  {
+        int32_t seize_place(int8_t tableIndex, int32_t index, int32_t depth) {
+            
             if (depth >= max_depth) {
                 return 0;
             }
@@ -30,6 +32,7 @@ class CUCKOO2 {
             std::vector<std::pair<K,V>>& hashTable = tableIndex ? hashTable2 : hashTable1;
             std::vector<std::pair<K,V>>& nextHashTable = (tableIndex ^ 1) ? hashTable2 : hashTable1;
             K& now_key = hashTable[index].first; 
+            // printf("%d %d %d %d %d %d\n", tableIndex, index, depth, now_key, my_hash1(now_key), my_hash2(now_key));
             int32_t nextIndex = (this->*my_hash)(now_key);
             int32_t ret;
             if (!nextBitset[nextIndex]) {
@@ -43,12 +46,13 @@ class CUCKOO2 {
             return ret;
         }
 
-        int32_t my_hash1(const K &key) {
+        int32_t my_hash1(const K &key) const {
             return std::hash<K>{}(key) % capacity;
         }
 
-        int32_t my_hash2(const K &key)  {
-            return (1ll * std::hash<K>{}(key) * 19260817 + 10007) % capacity;
+        int32_t my_hash2(const K &key) const {
+            int32_t h = std::hash<K>{}(key);
+            return (h ^ (0x9e3779b9 + (1ll * h << 6) + (h >> 2))) % capacity;
         }
         // void expand_capacity() { //扩容之后 capacity 就不是质数了，碰撞概率大大增加
         //     int32_t preCapacity = capacity;
@@ -100,6 +104,12 @@ class CUCKOO2 {
             bool free1 = !bitset1[index1];
             bool free2 = !bitset2[index2];
             bool random_num = distribution(generator); // 随机找一个插入
+            if (free1 && !free2) {
+                random_num = 0;
+            }
+            if (free2 && !free1) {
+                random_num = 1;
+            }
             int32_t index = random_num ? index2 : index1;
             std::vector<int8_t>& bitset = random_num ? bitset2 : bitset1;
             std::vector<std::pair<K,V>>& hashTable = random_num ? hashTable2 : hashTable1;
@@ -108,31 +118,25 @@ class CUCKOO2 {
                 int32_t depth = 0;
                 if (!(depth = seize_place(random_num, index, 1))) {
                     random_num ^= 1; // 随机的插入遇到死循环了，试试另一边
-                    index = random_num ? index2 : index1;
-                    bitset = random_num ? bitset2 : bitset1;
-                    hashTable = random_num ? hashTable2 : hashTable1;
+                    int32_t index = random_num ? index2 : index1;
+                    std::vector<int8_t>& bitset = random_num ? bitset2 : bitset1;
+                    std::vector<std::pair<K,V>>& hashTable = random_num ? hashTable2 : hashTable1;
                     if (!(depth = seize_place(random_num, index, 1))) {
                         // 都不行，报错
                         // expand_capacity();
                         #ifdef __CUCKOO2_DEBUG__
-                            printf("Failed to seize place.\n");
+                            //printf("Failed to seize place.\n");
                         #endif
                         return false;
                     }
+                    bitset[index] = true; // 这里换了引用
+                    hashTable[index] = std::pair<K, V>(key, data);
+                    Size ++;
+                    return true;
                 }
                 #ifdef __CUCKOO2_DEBUG__
                     printf("Seized place for %d cycles.\n", depth);
                 #endif
-            }
-            else if (free1 && !free2) {
-                index = index1;
-                bitset = bitset1;
-                hashTable = hashTable1;
-            }
-            else if (free2 && !free1) {
-                index = index2;
-                bitset = bitset2;
-                hashTable = hashTable2;
             }
 
             bitset[index] = true;
@@ -143,7 +147,7 @@ class CUCKOO2 {
         /*
         @param key 需要移除的数据的索引
         */
-        void remove(const K &key)  {
+        void remove(const K &key) {
             int32_t index1 = my_hash1(key);
             if (bitset1[index1] && hashTable1[index1].first == key) {
                 bitset1[index1] = 0;
@@ -161,22 +165,33 @@ class CUCKOO2 {
         @param key 需要查找是否存在的索引
         @return 1表示存在，0不存在
         */
-        bool find(const K &key)  {
+        bool find(const K &key) const {
             int32_t index1 = my_hash1(key);
             if (bitset1[index1] && hashTable1[index1].first == key) {
                 return true;
             }
             int32_t index2 = my_hash2(key);
-            if (bitset1[index2] && hashTable1[index2].first == key) {
+            if (bitset2[index2] && hashTable2[index2].first == key) {
                 return true;
             }
             return false;
         }
-
-        inline uint32_t size() {
+        V operator[](const K &key) const {
+            int32_t index1 = my_hash1(key);
+            if (bitset1[index1] && hashTable1[index1].first == key) {
+                return hashTable1[index1].second;
+            }
+            int32_t index2 = my_hash2(key);
+            if (bitset2[index2] && hashTable2[index2].first == key) {
+                return hashTable2[index2].second;
+            }
+            // 没找到，抛出异常
+            throw std::out_of_range("Key not found");
+        }
+        inline uint32_t size() const {
             return Size;
         }
-        inline uint32_t get_seed() {
+        inline uint32_t get_seed() const {
             return seed;
         }
 };
