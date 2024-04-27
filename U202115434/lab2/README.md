@@ -1,6 +1,6 @@
 # 实验名称
 
-搭建对象存储
+使用 swift go api
 
 ## 实验环境
 
@@ -16,14 +16,4 @@
 
 ## 实验操作
 
-本地使用 docker 搭建 swift 服务
-
-创建对应的数据文件夹后
-
-```shell
-docker run -P \
---name swift \
--p 18080:8080  \
--d \
--t dockerswiftaio/docker-swift
-```
+使用之前搭建的 swift 服务进行对象存储 go 语言 api 实践，完成容器创建删除，对象创建提取删除功能。
